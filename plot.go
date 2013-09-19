@@ -2,16 +2,12 @@ package plot
 
 import (
 	"image/color"
+	"reflect"
 	"time"
 )
 
 var now = time.Now
 var col = color.RGBA{}
-
-// DataFrame represents collection of data in table format.
-// It may be either of "slice of measurements" style or of
-// "collection of slices" style
-type DataFrame interface{}
 
 // -------------------------------------------------------------------------
 // Examples
@@ -28,11 +24,61 @@ var Diamonds = []ExampleData{
 	{6000, 0.15, "A", "O", "Perfect", 0.000000001},
 }
 
-
+type Panel struct {
+	Data DataFrame
+}
 
 func (p *Plot) draw() {
 	// Process faceting: How many facets are there, how are they named
-	
+	rows, cols := 1, 1
+	var cunq []interface{}
+	var runq []interface{}
+
+	if p.Faceting.Columns != "" {
+		_, _, cunq = MinMax(p.Data, p.Faceting.Columns)
+		t := reflect.TypeOf(cunq[0])
+		switch t.Kind() {
+		case reflect.Int64, reflect.String:
+		default:
+			panic("Cannot facet over " + t.String())
+		}
+		cols = len(cunq)
+	}
+
+	if p.Faceting.Rows != "" {
+		_, _, runq = MinMax(p.Data, p.Faceting.Rows)
+		t := reflect.TypeOf(runq[0])
+		switch t.Kind() {
+		case reflect.Int64, reflect.String:
+		default:
+			panic("Cannot facet over " + t.String())
+		}
+		rows = len(runq)
+	}
+
+	panels := make([][]Panel, rows, rows+1)
+	for r := 0; r < rows; r++ {
+		panels[r] = make([]Panel, cols, cols+1)
+		rdf := p.Data.Filter(p.Faceting.Rows, runq[r])
+		for c := 0; c < cols; c++ {
+			panels[r][c].Data = rdf.Filter(p.Faceting.Columns, cunq[c])
+			println("row: ", runq[r].(string), " col: ", cunq[c].(int64), "  n =", panels[r][c].Data.N)
+			if p.Faceting.Totals {
+				panels[r] = append(panels[r], Panel{Data: rdf})
+			}
+		}
+	}
+	if p.Faceting.Totals {
+		panels = append(panels, make([]Panel, cols+1))
+		for c := 0; c < rows; c++ {
+			cdf := p.Data.Filter(p.Faceting.Columns, cunq[c])
+			panels[rows][c] = Panel{Data: cdf}
+		}
+		panels[rows][cols] = Panel{Data: p.Data}
+		cols++
+		rows++
+	}
+
 	// Transform scales
 	// Compute statistics
 	// Map aestetics
@@ -49,7 +95,6 @@ type Plot struct {
 
 	// Mapping describes how fileds in data are mapped to Aesthetics
 	Aes AesMapping
-
 }
 
 type Theme struct {
@@ -62,7 +107,7 @@ var DefaultTheme = Theme{
 		Line: "fixed: 0",
 	},
 	PointAes: AesMapping{
-		Size: "fixed: 5pt",
+		Size:  "fixed: 5pt",
 		Shape: "fixed: 1",
 		Color: "fixed: #222222",
 	},

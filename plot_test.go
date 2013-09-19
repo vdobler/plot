@@ -4,16 +4,17 @@ import (
 	"testing"
 )
 
-
 func TestFaceting(t *testing.T) {
+	df, _ := NewDataFrame(measurement)
+
 	fac := Faceting{
 		Columns: "Group",
-		Rows: "Origin",
-		Totals: true,
+		Rows:    "Origin",
+		Totals:  true,
 	}
 
 	p := Plot{
-		Data: measurement,
+		Data:     df,
 		Faceting: fac,
 	}
 
