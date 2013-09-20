@@ -73,12 +73,12 @@ func TestNewDataFrame(t *testing.T) {
 
 func TestFilter(t *testing.T) {
 	df, _ := NewDataFrame(measurement)
-	exactly20 := df.Filter("Age", 20)
+	exactly20 := df.Filter("Age", int64(20))
 	if exactly20.N != 5 {
 		t.Errorf("Got %d, want 5", exactly20.N)
 	}
 
-	age30to39 := df.Filter("Group", 35)
+	age30to39 := df.Filter("Group", int64(35))
 	if age30to39.N != 6 {
 		t.Errorf("Got %d, want 6", age30to39.N)
 	}
@@ -86,6 +86,19 @@ func TestFilter(t *testing.T) {
 	deOnly := df.Filter("Origin", "uk")
 	if deOnly.N != 4 {
 		t.Errorf("Got %d, want 4", deOnly.N)
+	}
+}
+
+func TestLevels(t *testing.T) {
+	df, _ := NewDataFrame(measurement)
+	ageLevels := df.Levels("Age")
+	if len(ageLevels) != 10 || ageLevels[0].(int64) != 20 || ageLevels[9].(int64) != 47 {
+		t.Errorf("Got %v", ageLevels)
+	}
+
+	origLevels := df.Levels("Origin")
+	if len(origLevels) != 3 || origLevels[0].(string) != "ch" || origLevels[1].(string) != "de" || origLevels[2].(string) != "uk" {
+		t.Errorf("Got %#v", origLevels)
 	}
 }
 

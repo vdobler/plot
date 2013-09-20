@@ -35,7 +35,7 @@ func (p *Plot) draw() {
 	var runq []interface{}
 
 	if p.Faceting.Columns != "" {
-		_, _, cunq = MinMax(p.Data, p.Faceting.Columns)
+		cunq = p.Data.Levels(p.Faceting.Columns)
 		t := reflect.TypeOf(cunq[0])
 		switch t.Kind() {
 		case reflect.Int64, reflect.String:
@@ -46,7 +46,7 @@ func (p *Plot) draw() {
 	}
 
 	if p.Faceting.Rows != "" {
-		_, _, runq = MinMax(p.Data, p.Faceting.Rows)
+		runq = p.Data.Levels(p.Faceting.Rows)
 		t := reflect.TypeOf(runq[0])
 		switch t.Kind() {
 		case reflect.Int64, reflect.String:

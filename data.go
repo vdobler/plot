@@ -3,13 +3,23 @@ package plot
 import (
 	"fmt"
 	"reflect"
+	"sort"
 )
 
+// DataFrames are collections of tabular data.
 type DataFrame struct {
-	Data   interface{}
-	N      int
+	// Data is the data structure. Either a slice-of-mesurements or
+	// a collection-of-slices.
+	Data interface{}
+
+	// N is the number of observations in Data
+	N int
+
+	// Fields are the variables available in each observation.
 	Fields []Field
-	SOM    bool // true for slice-of-measurements, false for collection-of-slices
+
+	// SOM indicates whether Data is in SOM format.
+	SOM bool
 }
 
 // NewDataFrame construct a data frame from data. All fields wich can be
@@ -47,23 +57,24 @@ func newSOMDataFrame(data interface{}) (DataFrame, error) {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			field.Type = Int
 			field.Value = func(i int) interface{} {
-				return v.Index(i).Int()
+				println("Int-Value " + v.String() + " " + v.Index(i).Type().String())
+				return v.Index(i).FieldByName(f.Name).Int()
 			}
 		case reflect.String:
 			field.Type = String
 			field.Value = func(i int) interface{} {
-				return v.Index(i).String()
+				return v.Index(i).FieldByName(f.Name).String()
 			}
 		case reflect.Float32, reflect.Float64:
 			field.Type = Float
 			field.Value = func(i int) interface{} {
-				return v.Index(i).Float()
+				return v.Index(i).FieldByName(f.Name).Float()
 			}
 		case reflect.Struct:
 			if f.Name == "Time" && f.PkgPath == "time" {
 				field.Type = Time
 				field.Value = func(i int) interface{} {
-					return v.Index(i).Interface()
+					return v.Index(i).FieldByName(f.Name).Interface()
 				}
 			} else {
 				continue
@@ -92,23 +103,23 @@ func newSOMDataFrame(data interface{}) (DataFrame, error) {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			field.Type = Int
 			field.Value = func(i int) interface{} {
-				return m.Func.Call([]reflect.Value{v})[0].Int()
+				return m.Func.Call([]reflect.Value{v.Index(i)})[0].Int()
 			}
 		case reflect.String:
 			field.Type = String
 			field.Value = func(i int) interface{} {
-				return m.Func.Call([]reflect.Value{v})[0].String()
+				return m.Func.Call([]reflect.Value{v.Index(i)})[0].String()
 			}
 		case reflect.Float32, reflect.Float64:
 			field.Type = Float
 			field.Value = func(i int) interface{} {
-				return m.Func.Call([]reflect.Value{v})[0].Float()
+				return m.Func.Call([]reflect.Value{v.Index(i)})[0].Float()
 			}
 		case reflect.Struct:
 			if mt.Out(0).Name() == "Time" && mt.Out(0).PkgPath() == "time" {
 				field.Type = Time
 				field.Value = func(i int) interface{} {
-					return m.Func.Call([]reflect.Value{v})[0].Interface()
+					return m.Func.Call([]reflect.Value{v.Index(i)})[0].Interface()
 				}
 			} else {
 				continue
@@ -119,9 +130,23 @@ func newSOMDataFrame(data interface{}) (DataFrame, error) {
 		df.Fields = append(df.Fields, field)
 	}
 
+	// TODO: Maybe pointer methods too?
+	// v.Addr().MethodByName()
+
 	return df, nil
 }
 
+// Field returns the field with name fn.
+func (df DataFrame) Field(fn string) (Field, error) {
+	for _, f := range df.Fields {
+		if f.Name == fn {
+			return f, nil
+		}
+	}
+	return Field{}, fmt.Errorf("No such field %q", fn)
+}
+
+// Field represent a variable in one observation.
 type Field struct {
 	// Name of the field or method.
 	Name string
@@ -143,6 +168,16 @@ const (
 	String
 	Time
 )
+
+// Discrete returns true if ft is a descrete type.
+func (ft FieldType) Discrete() bool {
+	return ft == Int || ft == String
+}
+
+// Strings representation of ft.
+func (ft FieldType) String() string {
+	return []string{"Int", "Float", "String", "Time"}[ft]
+}
 
 // Filter extracts all rows from df where field==value.
 // Value may be an integer or a string.  TODO: allow range function
@@ -213,146 +248,60 @@ func (df DataFrame) filterSOM(valFunc func(int) interface{}, value interface{}, 
 	return rdf
 }
 
-// dfValueSOM extracts field from v.
-func dfValueSOM(v reflect.Value, field string) reflect.Value {
-	t := v.Type()
-	if _, ok := t.FieldByName(field); ok {
-		return v.FieldByName(field)
+// Sorting of int64 slices.
+type IntSlice []int64
+
+func (p IntSlice) Len() int           { return len(p) }
+func (p IntSlice) Less(i, j int) bool { return p[i] < p[j] }
+func (p IntSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func SortInts(a []int64)              { sort.Sort(IntSlice(a)) }
+
+// Levels returns the levels of field.
+func (df DataFrame) Levels(field string) []interface{} {
+	f, err := df.Field(field)
+	if err != nil || !f.Type.Discrete() {
+		panic("Field " + field + " not existent or continuous.")
 	}
 
-	if meth, ok := t.MethodByName(field); ok {
-		r := meth.Func.Call([]reflect.Value{v})
-		return r[0] // TODO: error handling?
-	}
-
-	panic("Bad field")
-}
-
-// MinMax determines minium and maximum value of field in df.
-// For integer and string types the unique values are returned too.
-func MinMax(df DataFrame, field string) (min, max interface{}, uniques []interface{}) {
-	t := reflect.TypeOf(df)
-	println(t.String())
-	switch t.Kind() {
-	case reflect.Slice:
-		return minMaxSOM(df, field)
-	case reflect.Struct:
-		panic("COS not implemented")
+	switch f.Type {
+	case Int:
+		uniques := make(map[int64]struct{})
+		for i := 0; i < df.N; i++ {
+			v := f.Value(i).(int64)
+			uniques[v] = struct{}{}
+		}
+		levels := make([]int64, len(uniques))
+		i := 0
+		for v, _ := range uniques {
+			levels[i] = v
+			i++
+		}
+		SortInts(levels)
+		result := make([]interface{}, len(levels))
+		for i, v := range levels {
+			result[i] = v
+		}
+		return result
+	case String:
+		uniques := make(map[string]struct{})
+		for i := 0; i < df.N; i++ {
+			v := f.Value(i).(string)
+			uniques[v] = struct{}{}
+		}
+		levels := make([]string, len(uniques))
+		i := 0
+		for v, _ := range uniques {
+			levels[i] = v
+			i++
+		}
+		sort.Strings(levels)
+		result := make([]interface{}, len(levels))
+		for i, v := range levels {
+			result[i] = v
+		}
+		return result
 	default:
-		panic("Not a data frame.")
-	}
-}
-
-func minMaxSOM(df DataFrame, field string) (min, max interface{}, uniques []interface{}) {
-	v := reflect.ValueOf(df)
-	ev := v.Index(0)
-	et := ev.Type()
-	et = dfValueSOM(ev, field).Type()
-	switch et.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return minMaxSOMInt(v, field, et)
-	case reflect.String:
-		return minMaxSOMString(v, field, et)
-	case reflect.Float32, reflect.Float64:
-		return minMaxSOMFloat(v, field, et)
-	case reflect.Struct:
-		if et.Name() == "Time" && et.PkgPath() == "time" {
-			return minMaxSOMTime(v, field, et)
-		}
-	}
-	panic("Bad data frame " + et.String())
-}
-
-// extract min, max (and unique values) from data frame df for field. t is the element type.
-func minMaxSOMInt(df reflect.Value, field string, t reflect.Type) (min, max int64, uniques []interface{}) {
-	allVals := make(map[int64]struct{})
-	n := df.Len()
-	for i := 0; i < n; i++ {
-		elem := df.Index(i)
-		fieldVal := dfValueSOM(elem, field)
-		val := fieldVal.Int()
-		allVals[val] = struct{}{}
-
-		// Determine min and max.
-		if i == 0 {
-			min = val
-			max = val
-		} else {
-			if val < min {
-				min = val
-			} else if val > max {
-				max = val
-			}
-		}
+		panic("Bad field for levels")
 	}
 
-	un := make([]interface{}, len(allVals))
-	i := 0
-	for v, _ := range allVals {
-		un[i] = v
-		i++
-	}
-
-	// TODO: Sort un
-
-	return min, max, un
-}
-
-func minMaxSOMString(df reflect.Value, field string, t reflect.Type) (min, max string, uniques []interface{}) {
-	allVals := make(map[string]struct{})
-	n := df.Len()
-	for i := 0; i < n; i++ {
-		elem := df.Index(i)
-		fieldVal := dfValueSOM(elem, field)
-		val := fieldVal.String()
-		allVals[val] = struct{}{}
-
-		// Determine min and max.
-		if i == 0 {
-			min = val
-			max = val
-		} else {
-			if val < min {
-				min = val
-			} else if val > max {
-				max = val
-			}
-		}
-	}
-
-	un := make([]interface{}, len(allVals))
-	i := 0
-	for v, _ := range allVals {
-		un[i] = v
-		i++
-	}
-
-	return min, max, un
-}
-
-func minMaxSOMFloat(df reflect.Value, field string, t reflect.Type) (min, max float64, uniq []interface{}) {
-	n := df.Len()
-	for i := 0; i < n; i++ {
-		elem := df.Index(i)
-		fieldVal := dfValueSOM(elem, field)
-		val := fieldVal.Float()
-
-		// Determine min and max.
-		if i == 0 {
-			min = val
-			max = val
-		} else {
-			if val < min {
-				min = val
-			} else if val > max {
-				max = val
-			}
-		}
-	}
-
-	return min, max, nil
-}
-
-func minMaxSOMTime(df reflect.Value, field string, t reflect.Type) (min, max interface{}, uniques []interface{}) {
-	panic("Not implemented")
 }
