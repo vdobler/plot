@@ -186,6 +186,7 @@ func (df DataFrame) Filter(field string, value interface{}) DataFrame {
 	// Make sure value has proper type.
 	switch reflect.TypeOf(value).Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		value = reflect.ValueOf(value).Int() // Make sure value is int64.
 		ft = Int
 	case reflect.String:
 		ft = String

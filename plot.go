@@ -9,26 +9,41 @@ import (
 var now = time.Now
 var col = color.RGBA{}
 
-// -------------------------------------------------------------------------
-// Examples
-
-type ExampleData struct {
-	Price, Carat        float64
-	Color, Clarity, Cut string
-	N2                  float64
-}
-
-var Diamonds = []ExampleData{
-	{2000, 0.1, "D", "J", "Fair", 0.000000456},
-	{3330, 0.2, "D", "J", "Fair", 0.000000556},
-	{6000, 0.15, "A", "O", "Perfect", 0.000000001},
-}
-
-type Panel struct {
+type Plot struct {
+	// Data is the data to draw.
 	Data DataFrame
+
+	// Faceting describes the Used Faceting
+	Faceting Faceting
+
+	// Mapping describes how fileds in data are mapped to Aesthetics
+	Aes AesMapping
+
+	// Layers contains all the layers displayed in the plot.
+	Layers []Layer
+
+	// Panels are the different panels for faceting
+	Panels [][]Panel
 }
 
-func (p *Plot) draw() {
+func (p *Plot) Draw() {
+	p.CreatePanels()
+
+	p.DistributeAes()
+
+	// Transform scales
+	// Compute statistics
+	p.ComputeStatistics()
+
+	// Map aestetics
+	// Train scales
+	// Render
+}
+
+// CreatePanels populates p.Panels, coverned by p.Faceting.
+//
+// Not only p.Data is facetted but p.Layers also (if they contain own data).
+func (p *Plot) CreatePanels() {
 	// Process faceting: How many facets are there, how are they named
 	rows, cols := 1, 1
 	var cunq []interface{}
@@ -56,45 +71,83 @@ func (p *Plot) draw() {
 		rows = len(runq)
 	}
 
-	panels := make([][]Panel, rows, rows+1)
+	p.Panels = make([][]Panel, rows, rows+1)
 	for r := 0; r < rows; r++ {
-		panels[r] = make([]Panel, cols, cols+1)
+		p.Panels[r] = make([]Panel, cols, cols+1)
 		rdf := p.Data.Filter(p.Faceting.Rows, runq[r])
 		for c := 0; c < cols; c++ {
-			panels[r][c].Data = rdf.Filter(p.Faceting.Columns, cunq[c])
-			println("row: ", runq[r].(string), " col: ", cunq[c].(int64), "  n =", panels[r][c].Data.N)
+			p.Panels[r][c].Data = rdf.Filter(p.Faceting.Columns, cunq[c])
+			for _, layer := range p.Layers {
+				if layer.Data != nil {
+					layer.Data = layer.Data.Filter(p.Faceting.Rows, runq[r])
+					layer.Data = layer.Data.Filter(p.Faceting.Columns, cunq[c])
+				}
+				p.Panels[r][c].Layers = append(p.Panels[r][c].Layers, layer)
+			}
+
 			if p.Faceting.Totals {
-				panels[r] = append(panels[r], Panel{Data: rdf})
+				p.Panels[r] = append(p.Panels[r], Panel{Data: rdf})
+				for _, layer := range p.Layers {
+					if layer.Data != nil {
+						layer.Data = layer.Data.Filter(p.Faceting.Rows, runq[r])
+					}
+					p.Panels[r][c].Layers = append(p.Panels[r][c].Layers, layer)
+				}
 			}
 		}
 	}
 	if p.Faceting.Totals {
-		panels = append(panels, make([]Panel, cols+1))
+		p.Panels = append(p.Panels, make([]Panel, cols+1))
 		for c := 0; c < rows; c++ {
 			cdf := p.Data.Filter(p.Faceting.Columns, cunq[c])
-			panels[rows][c] = Panel{Data: cdf}
+			p.Panels[rows][c] = Panel{Data: cdf}
 		}
-		panels[rows][cols] = Panel{Data: p.Data}
+		p.Panels[rows][cols] = Panel{Data: p.Data}
+		for _, layer := range p.Layers {
+			if layer.Data != nil {
+				layer.Data = layer.Data.Filter(p.Faceting.Columns, cunq[c])
+			}
+			p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
+		}
 		cols++
 		rows++
 	}
-
-	// Transform scales
-	// Compute statistics
-	// Map aestetics
-	// Train scales
-	// Render
 }
 
-type Plot struct {
-	// Data is the data to draw.
+// merge plot aes into each layer aes
+func (p *Plot) DistributeAes() {
+	for r := range p.Panels {
+		for c := range p.Panels[r] {
+			for l := range p.Panels[r][c].Layers {
+				p.Panels[r][c].Layers[l].Aes = plot.Aes.Merge(p.Panels[r][c].Layers[l].Aes)
+			}
+		}
+	}
+}
+
+func (p *Plot) ComputeStatistics() {
+	for r := range p.Panels {
+		for c := range p.Panels[r] {
+			p.Panels[r][c].Layers = []Layer{}
+			for _, layer := range p.Layers {
+				if layer.Stat != nil {
+					statDF := layer.Stat.Apply(layer.Data, layer.Aes)
+				}
+			}
+		}
+	}
+}
+
+type Panel struct {
 	Data DataFrame
 
-	// Faceting describes the Used Faceting
-	Faceting Faceting
+	RowName string
+	ColName string
 
-	// Mapping describes how fileds in data are mapped to Aesthetics
-	Aes AesMapping
+	// Plot is the plot this panel belongs to
+	Plot *Plot
+
+	Layers []Layer
 }
 
 type Theme struct {
@@ -129,6 +182,11 @@ type Faceting struct {
 
 // AesMapping controlls the mapping of fields of a data frame to aesthetics.
 // The zero value of AesMapping is the identity mapping.
+//
+// The following formats are used:
+//     "<fieldname>"        map aesthetic to this field
+//     "fixed: <value>"     set aesthetics to the given value
+//     "stat: <fieldname>   map aesthetic to this field, but use the computed stat
 type AesMapping struct {
 	X     string
 	Y     string
@@ -143,7 +201,7 @@ type AesMapping struct {
 	Ymax, Ymin, Xmin, Xmax string
 }
 
-// Merge merges set values in all the as into am an retunrs the merge mapping.
+// Merge merges set values in all the as into am and returns the merged mapping.
 func (am AesMapping) Merge(as ...AesMapping) AesMapping {
 	for _, a := range as {
 		if a.X != "" {
@@ -199,17 +257,20 @@ func (am AesMapping) Merge(as ...AesMapping) AesMapping {
 //
 type Layer struct {
 	// A nil Data will use the Data from the plot this Layer belongs to.
-	Data interface{}
+	Data DataFrame
 
 	// Stat is the statistical transformation used in this layer.
 	Stat Stat
+
+	// StatData contains the result of applying Stat to Data if Stat
+	// is not nil.
+	StatData DataFrame
 
 	// Geom is the geom to use for this layer
 	Geom Geom
 
 	// Aes is the aestetics mapping for this layer. Not every mapping is
 	// usefull for all Geoms.
-	// Each entry in Aes is of the form "aesthetics=field"
 	Aes AesMapping
 }
 

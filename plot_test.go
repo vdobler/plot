@@ -18,5 +18,5 @@ func TestFaceting(t *testing.T) {
 		Faceting: fac,
 	}
 
-	p.draw()
+	p.Draw()
 }

@@ -21,6 +21,15 @@ func (o Ops) Group() int {
 	return 10*(o.Age/10) + 5
 }
 
+func (o Ops) Country() string {
+	o2c := map[string]string{
+		"ch": "Schweiz",
+		"de": "Deutschland",
+		"uk": "England",
+	}
+	return o2c[o.Origin]
+}
+
 func (o Ops) Other() bool {
 	return true
 }
@@ -66,26 +75,56 @@ func TestNewDataFrame(t *testing.T) {
 		t.Errorf("Got %d elements, want 20", df.N)
 	}
 
-	if len(df.Fields) != 6 {
-		t.Errorf("Got %d fields, want 6", len(df.Fields))
+	if len(df.Fields) != 7 {
+		t.Errorf("Got %d fields, want 7", len(df.Fields))
 	}
 }
 
 func TestFilter(t *testing.T) {
 	df, _ := NewDataFrame(measurement)
-	exactly20 := df.Filter("Age", int64(20))
+	var got []Ops
+	exactly20 := df.Filter("Age", 20)
 	if exactly20.N != 5 {
 		t.Errorf("Got %d, want 5", exactly20.N)
 	}
+	got = exactly20.Data.([]Ops)
+	for i, g := range got {
+		if g.Age != 20 {
+			t.Errorf("Element %d has age %d (want 20)", i, g.Age)
+		}
+	}
 
-	age30to39 := df.Filter("Group", int64(35))
+	age30to39 := df.Filter("Group", 35)
 	if age30to39.N != 6 {
 		t.Errorf("Got %d, want 6", age30to39.N)
 	}
+	got = age30to39.Data.([]Ops)
+	for i, g := range got {
+		if g.Age < 30 || g.Age > 39 {
+			t.Errorf("Element %d has age %d (want 30-39)", i, g.Age)
+		}
+	}
 
-	deOnly := df.Filter("Origin", "uk")
-	if deOnly.N != 4 {
-		t.Errorf("Got %d, want 4", deOnly.N)
+	ukOnly := df.Filter("Origin", "uk")
+	if ukOnly.N != 4 {
+		t.Errorf("Got %d, want 4", ukOnly.N)
+	}
+	got = ukOnly.Data.([]Ops)
+	for i, g := range got {
+		if g.Origin != "uk" {
+			t.Errorf("Element %d has origin %s (want uk)", i, g.Origin)
+		}
+	}
+
+	deOnly := df.Filter("Country", "Deutschland")
+	if deOnly.N != 8 {
+		t.Errorf("Got %d, want 8", deOnly.N)
+	}
+	got = deOnly.Data.([]Ops)
+	for i, g := range got {
+		if g.Origin != "de" {
+			t.Errorf("Element %d has origin %s (want de)", i, g.Origin)
+		}
 	}
 }
 
