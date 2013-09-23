@@ -5,7 +5,7 @@ import (
 )
 
 func TestFaceting(t *testing.T) {
-	df, _ := NewDataFrame(measurement)
+	df, _ := NewDataFrameFrom(measurement)
 
 	fac := Faceting{
 		Columns: "Group",

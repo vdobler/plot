@@ -66,7 +66,7 @@ var measurement = []Ops{
 }
 
 func TestNewDataFrame(t *testing.T) {
-	df, err := NewDataFrame(measurement)
+	df, err := NewDataFrameFrom(measurement)
 	if err != nil {
 		t.Fatalf("Unexpected error %s", err)
 	}
@@ -75,22 +75,21 @@ func TestNewDataFrame(t *testing.T) {
 		t.Errorf("Got %d elements, want 20", df.N)
 	}
 
-	if len(df.Fields) != 7 {
-		t.Errorf("Got %d fields, want 7", len(df.Fields))
+	if len(df.Type) != 7 || len(df.Data) != 7 {
+		t.Errorf("Got %d, %d fields, want 7", len(df.Type), len(df.Data))
 	}
 }
 
 func TestFilter(t *testing.T) {
-	df, _ := NewDataFrame(measurement)
-	var got []Ops
+	df, _ := NewDataFrameFrom(measurement)
+
 	exactly20 := df.Filter("Age", 20)
 	if exactly20.N != 5 {
 		t.Errorf("Got %d, want 5", exactly20.N)
 	}
-	got = exactly20.Data.([]Ops)
-	for i, g := range got {
-		if g.Age != 20 {
-			t.Errorf("Element %d has age %d (want 20)", i, g.Age)
+	for i, a := range exactly20.Data["Age"] {
+		if a.(int64) != 20 {
+			t.Errorf("Element %d has age %v (want 20)", i, a)
 		}
 	}
 
@@ -98,10 +97,9 @@ func TestFilter(t *testing.T) {
 	if age30to39.N != 6 {
 		t.Errorf("Got %d, want 6", age30to39.N)
 	}
-	got = age30to39.Data.([]Ops)
-	for i, g := range got {
-		if g.Age < 30 || g.Age > 39 {
-			t.Errorf("Element %d has age %d (want 30-39)", i, g.Age)
+	for i, a := range age30to39.Data["Age"] {
+		if a.(int64) < 30 || a.(int64) > 39 {
+			t.Errorf("Element %d has age %v (want 20)", i, a)
 		}
 	}
 
@@ -109,10 +107,9 @@ func TestFilter(t *testing.T) {
 	if ukOnly.N != 4 {
 		t.Errorf("Got %d, want 4", ukOnly.N)
 	}
-	got = ukOnly.Data.([]Ops)
-	for i, g := range got {
-		if g.Origin != "uk" {
-			t.Errorf("Element %d has origin %s (want uk)", i, g.Origin)
+	for i, o := range ukOnly.Data["Origin"] {
+		if o.(string) != "uk" {
+			t.Errorf("Element %d has origin %v (want uk)", i, o)
 		}
 	}
 
@@ -120,16 +117,15 @@ func TestFilter(t *testing.T) {
 	if deOnly.N != 8 {
 		t.Errorf("Got %d, want 8", deOnly.N)
 	}
-	got = deOnly.Data.([]Ops)
-	for i, g := range got {
-		if g.Origin != "de" {
-			t.Errorf("Element %d has origin %s (want de)", i, g.Origin)
+	for i, o := range deOnly.Data["Origin"] {
+		if o.(string) != "de" {
+			t.Errorf("Element %d has origin %v (want de)", i, o)
 		}
 	}
 }
 
 func TestLevels(t *testing.T) {
-	df, _ := NewDataFrame(measurement)
+	df, _ := NewDataFrameFrom(measurement)
 	ageLevels := df.Levels("Age")
 	if len(ageLevels) != 10 || ageLevels[0].(int64) != 20 || ageLevels[9].(int64) != 47 {
 		t.Errorf("Got %v", ageLevels)

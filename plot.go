@@ -11,7 +11,7 @@ var col = color.RGBA{}
 
 type Plot struct {
 	// Data is the data to draw.
-	Data DataFrame
+	Data *DataFrame
 
 	// Faceting describes the Used Faceting
 	Faceting Faceting
@@ -29,11 +29,11 @@ type Plot struct {
 func (p *Plot) Draw() {
 	p.CreatePanels()
 
-	p.DistributeAes()
+	// p.DistributeAes()
 
 	// Transform scales
 	// Compute statistics
-	p.ComputeStatistics()
+	// p.ComputeStatistics()
 
 	// Map aestetics
 	// Train scales
@@ -97,23 +97,26 @@ func (p *Plot) CreatePanels() {
 		}
 	}
 	if p.Faceting.Totals {
-		p.Panels = append(p.Panels, make([]Panel, cols+1))
-		for c := 0; c < rows; c++ {
-			cdf := p.Data.Filter(p.Faceting.Columns, cunq[c])
-			p.Panels[rows][c] = Panel{Data: cdf}
-		}
-		p.Panels[rows][cols] = Panel{Data: p.Data}
-		for _, layer := range p.Layers {
-			if layer.Data != nil {
-				layer.Data = layer.Data.Filter(p.Faceting.Columns, cunq[c])
+		/*
+			p.Panels = append(p.Panels, make([]Panel, cols+1))
+			for c := 0; c < cols; c++ {
+				cdf := p.Data.Filter(p.Faceting.Columns, cunq[c])
+				p.Panels[rows][c] = Panel{Data: cdf}
 			}
-			p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
-		}
+			p.Panels[rows][cols] = Panel{Data: p.Data}
+			for _, layer := range p.Layers {
+				if layer.Data != nil {
+					layer.Data = layer.Data.Filter(p.Faceting.Columns, cunq[c])
+				}
+				p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
+			}
+		*/
 		cols++
 		rows++
 	}
 }
 
+/*
 // merge plot aes into each layer aes
 func (p *Plot) DistributeAes() {
 	for r := range p.Panels {
@@ -137,9 +140,10 @@ func (p *Plot) ComputeStatistics() {
 		}
 	}
 }
+*/
 
 type Panel struct {
-	Data DataFrame
+	Data *DataFrame
 
 	RowName string
 	ColName string
@@ -257,7 +261,7 @@ func (am AesMapping) Merge(as ...AesMapping) AesMapping {
 //
 type Layer struct {
 	// A nil Data will use the Data from the plot this Layer belongs to.
-	Data DataFrame
+	Data *DataFrame
 
 	// Stat is the statistical transformation used in this layer.
 	Stat Stat
