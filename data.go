@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"time"
 )
 
 type DataFrame struct {
@@ -307,4 +308,45 @@ func (df *DataFrame) Levels(field string) []interface{} {
 		panic("Bad field for levels")
 	}
 
+}
+
+
+// MinMax returns the minimum and maximum element and their indixes.
+func (df *DataFrame) MinMax(field string) (minval, maxval interface{}, minidx, maxidx int) {
+	t, ok := df.Type[field]
+	if !ok {
+		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
+	}
+
+	if df.N == 0 {
+		return 0, 0, -1, -1
+	}
+
+	column := df.Data[field]
+	var less func(interface{}, interface{}) bool
+	switch t {
+	case Int:
+		less = func(a interface{}, b interface{}) bool { return a.(int64) < b.(int64) }
+	case Float:
+		less = func(a interface{}, b interface{}) bool { return a.(float64) < b.(float64) }
+	case String:
+		less = func(a interface{}, b interface{}) bool { return a.(string) < b.(string) }
+	case Time:
+		less = func(a interface{}, b interface{}) bool { return a.(time.Time).Before(b.(time.Time)) }
+	default:
+		panic("Oooops")
+	}
+
+	minval, maxval = column[0], column[0]
+	minidx, maxidx = 0, 0
+	for i:=1; i<df.N; i++ {
+		v := column[i]
+		if less(v, minval) {
+			minval, minidx = v, i
+		} else if less(maxval, v) {
+			maxval, maxidx = v, i
+		}
+	}
+
+	return minval, maxval, minidx, maxidx
 }

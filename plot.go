@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"fmt"
 	"image/color"
 	"reflect"
 	"time"
@@ -280,7 +281,73 @@ type Layer struct {
 
 // Stat is the interface of statistical transform.
 type Stat interface {
-	Apply(data DataFrame, mapping AesMapping) DataFrame
+	Apply(data *DataFrame, mapping AesMapping) *DataFrame
+	NeededAes() []string
+}
+
+type StatBin struct {
+	BinWidth float64
+	Drop     bool
+}
+
+func (StatBin) NeededAes() []string {
+	return []string{"x"}
+}
+
+func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
+	type StatBinData struct {
+		X        float64
+		Count    int64
+		Density  float64
+		NCount   float64
+		NDensity float64
+	}
+
+	field := mapping.X
+	min, max, _, _ := data.MinMax(field)
+	fmax, fmin := min.(float64), max.(float64)
+
+	var binWidth float64 = s.BinWidth
+	var numBins int
+	if binWidth == 0 {
+		binWidth = (fmax - fmin) / 30
+		numBins = 30
+	} else {
+		numBins = int((fmax-fmin)/binWidth + 0.5)
+	}
+
+	counts := make([]int64, numBins)
+	column := data.Data[field]
+	for i := 0; i < data.N; i++ {
+		x := column[i].(float64)
+		bin := int((x-fmin)/binWidth + 0.5)
+		counts[bin]++
+	}
+	maxcount := int64(0)
+	for _, count := range counts {
+		if count > maxcount {
+			maxcount = count
+		}
+	}
+
+	result := []StatBinData{}
+	for bin, count := range counts {
+		if count == 0 && s.Drop {
+			continue
+		}
+		result = append(result, StatBinData{
+			X:        fmin + (float64(bin)+0.5)*binWidth,
+			Count:    count,
+			NCount:   float64(count) / float64(maxcount),
+			Density:  0, // TODO
+			NDensity: 0, // TODO
+		})
+	}
+
+	answer, _ := NewDataFrameFrom(result)
+	answer.Name = fmt.Sprintf("%s binned by %q", data.Name, field)
+	return answer
+
 }
 
 // Geom is a geometrical object, a type of visual for the plot.

@@ -137,43 +137,14 @@ func TestLevels(t *testing.T) {
 	}
 }
 
-/*
 func TestMinMax(t *testing.T) {
-	amin, amax, auniq := MinMax(measurement, "Age")
-	if amin.(int64) != 20 {
-		t.Errorf("Got %d, want 20", amin.(int64))
-	}
-	if amax.(int64) != 47 {
-		t.Errorf("Got %d, want 47", amax.(int64))
-	}
-	if len(auniq) != 10 {
-		t.Errorf("Got %d, want 10", len(auniq))
-	}
+	df, _ := NewDataFrameFrom(measurement)
 
-
-	bmin, bmax, buniq := MinMax(measurement, "BMI")
-	if math.Abs(bmin.(float64)-21.2585) > 0.01  {
-		t.Errorf("Got %f, want 21.2585", bmin.(float64))
+	min, max, a, b := df.MinMax("Weight")
+	if min.(float64) != 55 || a != 18 {
+		t.Errorf("Min: Got %f/%d, want 55.00/18", min.(float64), a)
 	}
-	if math.Abs(bmax.(float64) - 34.29355) > 0.01 {
-		t.Errorf("Got %f, want 34.29355", bmax.(float64))
+	if max.(float64) != 99.0 || b != 10 {
+		t.Errorf("Min: Got %f/%d, want 99.00/10", max.(float64), b)
 	}
-	if len(buniq) != 0 {
-		t.Errorf("Got %f, want 0", len(buniq))
-	}
-
-
-	omin, omax, ouniq := MinMax(measurement, "Origin")
-	if omin.(string) != "ch"  {
-		t.Errorf("Got %s, want ch", omin.(string))
-	}
-	if omax.(string) != "uk" {
-		t.Errorf("Got %s, want uk", omax.(string))
-	}
-	if len(ouniq) != 3 || ouniq[1].(string) != "de" {
-		t.Errorf("Got %v, want [ch de uk]", ouniq)
-	}
-
 }
-
-*/
