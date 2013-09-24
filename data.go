@@ -2,8 +2,10 @@ package plot
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 	"sort"
+	"text/tabwriter"
 	"time"
 )
 
@@ -310,7 +312,6 @@ func (df *DataFrame) Levels(field string) []interface{} {
 
 }
 
-
 // MinMax returns the minimum and maximum element and their indixes.
 func (df *DataFrame) MinMax(field string) (minval, maxval interface{}, minidx, maxidx int) {
 	t, ok := df.Type[field]
@@ -339,7 +340,7 @@ func (df *DataFrame) MinMax(field string) (minval, maxval interface{}, minidx, m
 
 	minval, maxval = column[0], column[0]
 	minidx, maxidx = 0, 0
-	for i:=1; i<df.N; i++ {
+	for i := 1; i < df.N; i++ {
 		v := column[i]
 		if less(v, minval) {
 			minval, minidx = v, i
@@ -349,4 +350,26 @@ func (df *DataFrame) MinMax(field string) (minval, maxval interface{}, minidx, m
 	}
 
 	return minval, maxval, minidx, maxidx
+}
+
+func (df *DataFrame) Print(out io.Writer) {
+	names := df.FieldNames()
+
+	fmt.Fprintf(out, "Data Frame %q:\n", df.Name)
+
+	w := new(tabwriter.Writer)
+	w.Init(out, 0, 8, 2, ' ', 0)
+	for _, name := range names {
+		fmt.Fprintf(w, "\t%s", name)
+	}
+	fmt.Fprintln(w)
+	for i := 0; i < df.N; i++ {
+		fmt.Fprintf(w, "%d", i)
+		for _, name := range names {
+			fmt.Fprintf(w, "\t%v", df.Data[name][i])
+		}
+		fmt.Fprintln(w)
+	}
+	w.Flush()
+
 }

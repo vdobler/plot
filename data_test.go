@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"os"
 	"testing"
 	// "math"
 )
@@ -147,4 +148,9 @@ func TestMinMax(t *testing.T) {
 	if max.(float64) != 99.0 || b != 10 {
 		t.Errorf("Min: Got %f/%d, want 99.00/10", max.(float64), b)
 	}
+}
+
+func TestPrint(t *testing.T) {
+	df, _ := NewDataFrameFrom(measurement)
+	df.Print(os.Stdout)
 }
