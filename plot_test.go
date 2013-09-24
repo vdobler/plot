@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"os"
 	"testing"
 )
 
@@ -19,4 +20,13 @@ func TestFaceting(t *testing.T) {
 	}
 
 	p.Draw()
+}
+
+func TestStatBin(t *testing.T) {
+	df, _ := NewDataFrameFrom(measurement)
+	sb := StatBin{BinWidth: 2, Drop: true}
+	mapping := AesMapping{X: "BMI"}
+	bined := sb.Apply(df, mapping)
+
+	bined.Print(os.Stdout)
 }

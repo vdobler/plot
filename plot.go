@@ -294,18 +294,18 @@ func (StatBin) NeededAes() []string {
 	return []string{"x"}
 }
 
-func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
-	type StatBinData struct {
-		X        float64
-		Count    int64
-		Density  float64
-		NCount   float64
-		NDensity float64
-	}
+type StatBinData struct {
+	X        float64
+	Count    int64
+	Density  float64
+	NCount   float64
+	NDensity float64
+}
 
+func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	field := mapping.X
 	min, max, _, _ := data.MinMax(field)
-	fmax, fmin := min.(float64), max.(float64)
+	fmin, fmax := min.(float64), max.(float64)
 
 	var binWidth float64 = s.BinWidth
 	var numBins int
@@ -316,7 +316,8 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 		numBins = int((fmax-fmin)/binWidth + 0.5)
 	}
 
-	counts := make([]int64, numBins)
+	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
+	counts := make([]int64, numBins+1) // TODO: Buggy here
 	column := data.Data[field]
 	for i := 0; i < data.N; i++ {
 		x := column[i].(float64)
