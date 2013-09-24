@@ -204,7 +204,11 @@ func isTime(x reflect.Type) bool {
 
 // Filter extracts all rows from df where field==value.
 // Value may be an integer or a string.  TODO: allow range function
-func (df *DataFrame) Filter(field string, value interface{}) *DataFrame {
+func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
+	if df == nil {
+		return nil
+	}
+
 	var ft FieldType
 	// Make sure value has proper type.
 	switch reflect.TypeOf(value).Kind() {
@@ -261,7 +265,10 @@ func (p IntSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func SortInts(a []int64)              { sort.Sort(IntSlice(a)) }
 
 // Levels returns the levels of field.
-func (df *DataFrame) Levels(field string) []interface{} {
+func Levels(df *DataFrame, field string) []interface{} {
+	if df == nil {
+		return nil
+	}
 	t, ok := df.Type[field]
 	if !ok {
 		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
@@ -313,7 +320,10 @@ func (df *DataFrame) Levels(field string) []interface{} {
 }
 
 // MinMax returns the minimum and maximum element and their indixes.
-func (df *DataFrame) MinMax(field string) (minval, maxval interface{}, minidx, maxidx int) {
+func MinMax(df *DataFrame, field string) (minval, maxval interface{}, minidx, maxidx int) {
+	if df == nil {
+		return nil, nil, -1, -1
+	}
 	t, ok := df.Type[field]
 	if !ok {
 		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))

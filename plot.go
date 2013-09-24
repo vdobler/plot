@@ -51,7 +51,7 @@ func (p *Plot) CreatePanels() {
 	var runq []interface{}
 
 	if p.Faceting.Columns != "" {
-		cunq = p.Data.Levels(p.Faceting.Columns)
+		cunq = Levels(p.Data, p.Faceting.Columns)
 		t := reflect.TypeOf(cunq[0])
 		switch t.Kind() {
 		case reflect.Int64, reflect.String:
@@ -62,7 +62,7 @@ func (p *Plot) CreatePanels() {
 	}
 
 	if p.Faceting.Rows != "" {
-		runq = p.Data.Levels(p.Faceting.Rows)
+		runq = Levels(p.Data, p.Faceting.Rows)
 		t := reflect.TypeOf(runq[0])
 		switch t.Kind() {
 		case reflect.Int64, reflect.String:
@@ -75,13 +75,13 @@ func (p *Plot) CreatePanels() {
 	p.Panels = make([][]Panel, rows, rows+1)
 	for r := 0; r < rows; r++ {
 		p.Panels[r] = make([]Panel, cols, cols+1)
-		rdf := p.Data.Filter(p.Faceting.Rows, runq[r])
+		rdf := Filter(p.Data, p.Faceting.Rows, runq[r])
 		for c := 0; c < cols; c++ {
-			p.Panels[r][c].Data = rdf.Filter(p.Faceting.Columns, cunq[c])
+			p.Panels[r][c].Data = Filter(rdf, p.Faceting.Columns, cunq[c])
 			for _, layer := range p.Layers {
 				if layer.Data != nil {
-					layer.Data = layer.Data.Filter(p.Faceting.Rows, runq[r])
-					layer.Data = layer.Data.Filter(p.Faceting.Columns, cunq[c])
+					layer.Data = Filter(layer.Data, p.Faceting.Rows, runq[r])
+					layer.Data = Filter(layer.Data, p.Faceting.Columns, cunq[c])
 				}
 				p.Panels[r][c].Layers = append(p.Panels[r][c].Layers, layer)
 			}
@@ -90,7 +90,7 @@ func (p *Plot) CreatePanels() {
 				p.Panels[r] = append(p.Panels[r], Panel{Data: rdf})
 				for _, layer := range p.Layers {
 					if layer.Data != nil {
-						layer.Data = layer.Data.Filter(p.Faceting.Rows, runq[r])
+						layer.Data = Filter(layer.Data, p.Faceting.Rows, runq[r])
 					}
 					p.Panels[r][c].Layers = append(p.Panels[r][c].Layers, layer)
 				}
@@ -304,7 +304,7 @@ type StatBinData struct {
 
 func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	field := mapping.X
-	min, max, _, _ := data.MinMax(field)
+	min, max, _, _ := MinMax(data, field)
 	fmin, fmax := min.(float64), max.(float64)
 
 	var binWidth float64 = s.BinWidth
