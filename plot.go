@@ -3,6 +3,7 @@ package plot
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"reflect"
 	"time"
 )
@@ -288,66 +289,111 @@ type Stat interface {
 type StatBin struct {
 	BinWidth float64
 	Drop     bool
+	Origin   *float64 // TODO: both optional fields as *float64?
 }
 
 func (StatBin) NeededAes() []string {
 	return []string{"x"}
 }
 
-type StatBinData struct {
-	X        float64
-	Count    int64
-	Density  float64
-	NCount   float64
-	NDensity float64
-}
-
 func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
+	if data == nil {
+		return nil
+	}
 	field := mapping.X
 	min, max, _, _ := MinMax(data, field)
-	fmin, fmax := min.(float64), max.(float64)
+	ft := data.Type[field]
 
 	var binWidth float64 = s.BinWidth
 	var numBins int
-	if binWidth == 0 {
-		binWidth = (fmax - fmin) / 30
-		numBins = 30
-	} else {
-		numBins = int((fmax-fmin)/binWidth + 0.5)
+	var x2bin func(interface{}) int
+	var bin2x func(int) interface{}
+
+	switch ft {
+	case Float:
+		fmin, fmax := min.(float64), max.(float64)
+		var origin float64
+		if binWidth == 0 {
+			binWidth = (fmax - fmin) / 30
+			numBins = 30
+		} else {
+			numBins = int((fmax-fmin)/binWidth + 0.5)
+		}
+		if s.Origin != nil {
+			origin = *s.Origin
+		} else {
+			origin = math.Floor(fmin/binWidth) * binWidth // round origin TODO: might overflow
+		}
+
+		x2bin = func(x interface{}) int {
+			xf := x.(float64)
+			return int((xf - origin) / binWidth)
+		}
+		bin2x = func(b int) interface{} {
+			return origin + (float64(b)+0.5)*binWidth
+		}
+	case Int:
+		imin, imax := min.(int64), max.(int64)
+		var origin int64
+		var bw int64
+		if binWidth == 0 {
+			bw = (imax - imin) / 20
+			if bw == 0 {
+				bw = 1
+			}
+			numBins = int((imax - imin) / bw)
+		} else {
+			bw = int64(binWidth)
+			numBins = int((imax - imin) / bw)
+		}
+		if s.Origin != nil {
+			origin = int64(*s.Origin)
+		} else {
+			origin = (imin / bw) * bw // round origin TODO: might overflow
+		}
+
+		x2bin = func(x interface{}) int {
+			xf := x.(int64)
+			return int((xf - origin) / bw)
+		}
+		bin2x = func(b int) interface{} {
+			return origin + int64(b)*bw
+		}
+	default:
+		panic("Oooops")
 	}
 
 	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
 	counts := make([]int64, numBins+1) // TODO: Buggy here
 	column := data.Data[field]
-	for i := 0; i < data.N; i++ {
-		x := column[i].(float64)
-		bin := int((x-fmin)/binWidth + 0.5)
-		counts[bin]++
-	}
 	maxcount := int64(0)
-	for _, count := range counts {
-		if count > maxcount {
-			maxcount = count
+	for i := 0; i < data.N; i++ {
+		bin := x2bin(column[i])
+		counts[bin]++
+		if counts[bin] > maxcount {
+			maxcount = counts[bin]
 		}
 	}
 
-	result := []StatBinData{}
+	result := NewDataFrame(fmt.Sprintf("%s binned by %s", data.Name, field))
+	result.Type["X"] = ft
+	result.Type["Count"] = Int
+	result.Type["NCount"] = Float
+	result.Type["Density"] = Float
+	result.Type["NDensity"] = Float
 	for bin, count := range counts {
 		if count == 0 && s.Drop {
 			continue
 		}
-		result = append(result, StatBinData{
-			X:        fmin + (float64(bin)+0.5)*binWidth,
-			Count:    count,
-			NCount:   float64(count) / float64(maxcount),
-			Density:  0, // TODO
-			NDensity: 0, // TODO
-		})
+		result.Data["X"] = append(result.Data["X"], bin2x(bin))
+		result.Data["Count"] = append(result.Data["Count"], count)
+		result.Data["NCount"] = append(result.Data["NCount"], float64(0)) // TODO: here and next two
+		result.Data["Density"] = append(result.Data["Density"], float64(0))
+		result.Data["NDensity"] = append(result.Data["NDensity"], float64(0))
+		result.N++
 	}
 
-	answer, _ := NewDataFrameFrom(result)
-	answer.Name = fmt.Sprintf("%s binned by %q", data.Name, field)
-	return answer
+	return result
 
 }
 

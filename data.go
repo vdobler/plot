@@ -115,7 +115,7 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 		}
 		df.Data[f.Name] = values
 
-		println("newSOMDataFrame: added field Name =", f.Name, "   type =", f.Type.String())
+		// println("newSOMDataFrame: added field Name =", f.Name, "   type =", f.Type.String())
 
 	}
 
@@ -169,7 +169,7 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 
 		df.Data[m.Name] = values
 
-		println("newSOMDataFrame: added method Name =", m.Name, "   type =", df.Type[m.Name].String())
+		// println("newSOMDataFrame: added method Name =", m.Name, "   type =", df.Type[m.Name].String())
 	}
 
 	// TODO: Maybe pointer methods too?

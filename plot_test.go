@@ -27,6 +27,11 @@ func TestStatBin(t *testing.T) {
 	sb := StatBin{BinWidth: 2, Drop: true}
 	mapping := AesMapping{X: "BMI"}
 	bined := sb.Apply(df, mapping)
-
 	bined.Print(os.Stdout)
+
+	sb = StatBin{BinWidth: 5, Drop: false}
+	mapping = AesMapping{X: "Age"}
+	bined = sb.Apply(df, mapping)
+	bined.Print(os.Stdout)
+
 }
