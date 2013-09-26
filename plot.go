@@ -392,6 +392,14 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 		result.Data["NDensity"] = append(result.Data["NDensity"], float64(0))
 		result.N++
 	}
+	/*
+		res <- within(results, {
+		    count[is.na(count)] <- 0
+		    density <- count / width / sum(abs(count), na.rm=TRUE)
+		    ncount <- count / max(abs(count), na.rm=TRUE)
+		    ndensity <- density / max(abs(density), na.rm=TRUE)
+		  })
+	*/
 
 	return result
 
@@ -404,6 +412,9 @@ type Geom interface {
 
 	// Render draws the Geom onto plot
 	Render(data DataFrame, aes AesMapping, plot Plot)
+}
+
+type GeomBar struct {
 }
 
 /********************************************
