@@ -306,62 +306,22 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 
 	var binWidth float64 = s.BinWidth
 	var numBins int
-	var x2bin func(interface{}) int
-	var bin2x func(int) interface{}
 
-	switch ft {
-	case Float:
-		fmin, fmax := min.(float64), max.(float64)
-		var origin float64
-		if binWidth == 0 {
-			binWidth = (fmax - fmin) / 30
-			numBins = 30
-		} else {
-			numBins = int((fmax-fmin)/binWidth + 0.5)
-		}
-		if s.Origin != nil {
-			origin = *s.Origin
-		} else {
-			origin = math.Floor(fmin/binWidth) * binWidth // round origin TODO: might overflow
-		}
-
-		x2bin = func(x interface{}) int {
-			xf := x.(float64)
-			return int((xf - origin) / binWidth)
-		}
-		bin2x = func(b int) interface{} {
-			return origin + (float64(b)+0.5)*binWidth
-		}
-	case Int:
-		imin, imax := min.(int64), max.(int64)
-		var origin int64
-		var bw int64
-		if binWidth == 0 {
-			bw = (imax - imin) / 20
-			if bw == 0 {
-				bw = 1
-			}
-			numBins = int((imax - imin) / bw)
-		} else {
-			bw = int64(binWidth)
-			numBins = int((imax - imin) / bw)
-		}
-		if s.Origin != nil {
-			origin = int64(*s.Origin)
-		} else {
-			origin = (imin / bw) * bw // round origin TODO: might overflow
-		}
-
-		x2bin = func(x interface{}) int {
-			xf := x.(int64)
-			return int((xf - origin) / bw)
-		}
-		bin2x = func(b int) interface{} {
-			return origin + int64(b)*bw
-		}
-	default:
-		panic("Oooops")
+	var origin float64
+	if binWidth == 0 {
+		binWidth = (max - min) / 30
+		numBins = 30
+	} else {
+		numBins = int((max-min)/binWidth + 0.5)
 	}
+	if s.Origin != nil {
+		origin = *s.Origin
+	} else {
+		origin = math.Floor(min/binWidth) * binWidth // round origin TODO: might overflow
+	}
+
+	x2bin := func(x float64) int { return int((x - origin) / binWidth) }
+	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 }
 
 	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
 	counts := make([]int64, numBins+1) // TODO: Buggy here
@@ -377,16 +337,16 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 
 	result := NewDataFrame(fmt.Sprintf("%s binned by %s", data.Name, field))
 	result.Type["X"] = ft
-	result.Type["Count"] = Int
-	result.Type["NCount"] = Float
-	result.Type["Density"] = Float
-	result.Type["NDensity"] = Float
+	result.Type["Count"] = Field{Type: Int}
+	result.Type["NCount"] = Field{Type: Float}
+	result.Type["Density"] = Field{Type: Float}
+	result.Type["NDensity"] = Field{Type: Float}
 	for bin, count := range counts {
 		if count == 0 && s.Drop {
 			continue
 		}
 		result.Data["X"] = append(result.Data["X"], bin2x(bin))
-		result.Data["Count"] = append(result.Data["Count"], count)
+		result.Data["Count"] = append(result.Data["Count"], float64(count))
 		result.Data["NCount"] = append(result.Data["NCount"], float64(0)) // TODO: here and next two
 		result.Data["Density"] = append(result.Data["Density"], float64(0))
 		result.Data["NDensity"] = append(result.Data["NDensity"], float64(0))
