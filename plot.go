@@ -9,6 +9,7 @@ import (
 
 var now = time.Now
 var col = color.RGBA{}
+var floor = math.Floor
 
 type Plot struct {
 	// Data is the data to draw.
@@ -271,107 +272,6 @@ type Layer struct {
 	// Aes is the aestetics mapping for this layer. Not every mapping is
 	// usefull for all Geoms.
 	Aes AesMapping
-}
-
-// Stat is the interface of statistical transform.
-type Stat interface {
-	Apply(data *DataFrame, mapping AesMapping) *DataFrame
-	NeededAes() []string
-}
-
-type StatBin struct {
-	BinWidth float64
-	Drop     bool
-	Origin   *float64 // TODO: both optional fields as *float64?
-}
-
-func (StatBin) NeededAes() []string {
-	return []string{"x"}
-}
-
-func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
-	if data == nil {
-		return nil
-	}
-	field := mapping.X
-	min, max, _, _ := MinMax(data, field)
-
-	var binWidth float64 = s.BinWidth
-	var numBins int
-
-	var origin float64
-	if binWidth == 0 {
-		binWidth = (max - min) / 30
-		numBins = 30
-	} else {
-		numBins = int((max-min)/binWidth + 0.5)
-	}
-	if s.Origin != nil {
-		origin = *s.Origin
-	} else {
-		origin = math.Floor(min/binWidth) * binWidth // round origin TODO: might overflow
-	}
-
-	x2bin := func(x float64) int { return int((x - origin) / binWidth) }
-	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 }
-
-	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
-	counts := make([]int64, numBins+1) // TODO: Buggy here
-	column := data.Columns[field].Data
-	maxcount := int64(0)
-	for i := 0; i < data.N; i++ {
-		bin := x2bin(column[i])
-		counts[bin]++
-		if counts[bin] > maxcount {
-			maxcount = counts[bin]
-		}
-	}
-
-	result := NewDataFrame(fmt.Sprintf("%s binned by %s", data.Name, field))
-	nr := 0
-	for _, count := range counts {
-		if count == 0 && s.Drop {
-			continue
-		}
-		nr++
-	}
-	X := NewField(nr)
-	Count := NewField(nr)
-	NCount := NewField(nr)
-	Density := NewField(nr)
-	NDensity := NewField(nr)
-	X.Type = data.Columns[field].Type
-	Count.Type = Int
-	NCount.Type = Float
-	Density.Type = Float
-	NDensity.Type = Float
-	i := 0
-	maxDensity := float64(0)
-	for bin, count := range counts {
-		if count == 0 && s.Drop {
-			continue
-		}
-		X.Data[i] = bin2x(bin)
-		Count.Data[i] = float64(count)
-		NCount.Data[i] = float64(count) / float64(maxcount)
-		density := float64(count) / binWidth / float64(data.N)
-		Density.Data[i] = density
-		if density > maxDensity {
-			maxDensity = density
-		}
-
-	}
-	i = 0
-	for _, count := range counts {
-		if count == 0 && s.Drop {
-			continue
-		}
-		NDensity.Data[i] = Density.Data[i] / maxDensity
-		i++
-	}
-
-	return result
-
 }
 
 // Geom is a geometrical object, a type of visual for the plot.
