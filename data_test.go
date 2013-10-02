@@ -1,10 +1,15 @@
 package plot
 
 import (
+	"fmt"
+	"math"
 	"os"
+	"sort"
 	"testing"
-	// "math"
 )
+
+var _ = fmt.Printf
+var _ = math.Floor
 
 type Ops struct {
 	Age     int
@@ -76,8 +81,8 @@ func TestNewDataFrame(t *testing.T) {
 		t.Errorf("Got %d elements, want 20", df.N)
 	}
 
-	if len(df.Type) != 7 || len(df.Data) != 7 {
-		t.Errorf("Got %d, %d fields, want 7", len(df.Type), len(df.Data))
+	if len(df.Columns) != 7 {
+		t.Errorf("Got %d fields, want 7", len(df.Columns))
 	}
 }
 
@@ -86,9 +91,9 @@ func TestFilter(t *testing.T) {
 
 	exactly20 := Filter(df, "Age", 20)
 	if exactly20.N != 5 {
-		t.Errorf("Got %d, want 5", exactly20.N)
+		t.Errorf("Got %d (%d), want 5", exactly20.N, len(exactly20.Columns["Age"].Data))
 	}
-	for i, a := range exactly20.Data["Age"] {
+	for i, a := range exactly20.Columns["Age"].Data {
 		if a != 20 {
 			t.Errorf("Element %d has age %v (want 20)", i, a)
 		}
@@ -98,7 +103,7 @@ func TestFilter(t *testing.T) {
 	if age30to39.N != 6 {
 		t.Errorf("Got %d, want 6", age30to39.N)
 	}
-	for i, a := range age30to39.Data["Age"] {
+	for i, a := range age30to39.Columns["Age"].Data {
 		if a < 30 || a > 39 {
 			t.Errorf("Element %d has age %v (want 20)", i, a)
 		}
@@ -108,10 +113,12 @@ func TestFilter(t *testing.T) {
 	if ukOnly.N != 4 {
 		t.Errorf("Got %d, want 4", ukOnly.N)
 	}
-	ukIdx := float64(ukOnly.Type["Origin"].StrIdx("uk"))
-	for i, o := range ukOnly.Data["Origin"] {
-		if o != ukIdx {
-			t.Errorf("Element %d has origin %v (want uk)", i, o)
+	originField := ukOnly.Columns["Origin"]
+	fmt.Printf("Str: %v\n", originField.Str)
+	ukIdx := originField.StrIdx("uk")
+	for i, o := range ukOnly.Columns["Origin"].Data {
+		if int(o) != ukIdx || originField.String(o) != "uk" {
+			t.Errorf("Element %d: Got %.1f %q, want %d \"uk\"", i, o, originField.String(o), ukIdx)
 		}
 	}
 
@@ -131,13 +138,19 @@ func TestFilter(t *testing.T) {
 func TestLevels(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
 	ageLevels := Levels(df, "Age")
-	if len(ageLevels) != 10 || ageLevels[0].(float64) != 20 || ageLevels[9].(float64) != 47 */{
+	if len(ageLevels) != 10 || ageLevels[0] != 20 || ageLevels[9] != 47 {
 		t.Errorf("Got %v", ageLevels)
 	}
 
 	origLevels := Levels(df, "Origin")
-	if len(origLevels) != 3 || origLevels[0].(string) != "ch" || origLevels[1].(string) != "de" || origLevels[2].(string) != "uk" {
-		t.Errorf("Got %#v", origLevels)
+	if len(origLevels) != 3 || origLevels[0] != 0 || origLevels[1] != 1 || origLevels[2] != 2 {
+		t.Errorf("Got %#v want [0 1 2]", origLevels)
+	}
+
+	origStr := df.Columns["Origin"].Strings(origLevels)
+	sort.Strings(origStr)
+	if origStr[0] != "ch" || origStr[1] != "de" || origStr[2] != "uk" {
+		t.Errorf("Got %v, want [ch, de, uk]", origStr)
 	}
 }
 

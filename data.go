@@ -11,15 +11,45 @@ import (
 	"time"
 )
 
+var m = math.Floor
+
 type DataFrame struct {
-	Name string
-	N    int
-	Data map[string][]float64
-	Type map[string]Field
+	Name    string
+	N       int
+	Columns map[string]Field
+}
+
+type Field struct {
+	Type   FieldType
+	Str    []string // contains the string values
+	Origin int64
+	Data   []float64
+}
+
+func NewField(n int) Field {
+	f := Field{
+		Type:   0,
+		Str:    nil,
+		Origin: 0,
+		Data:   make([]float64, n),
+	}
+	return f
+}
+
+func (f Field) Copy() Field {
+	c := Field{
+		Type:   f.Type,
+		Origin: f.Origin,
+		Str:    make([]string, len(f.Str)),
+		Data:   make([]float64, len(f.Data)),
+	}
+	copy(c.Str, f.Str)
+	copy(c.Data, f.Data)
+	return c
 }
 
 func (df *DataFrame) FieldNames() (names []string) {
-	for name, _ := range df.Data {
+	for name, _ := range df.Columns {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -27,12 +57,9 @@ func (df *DataFrame) FieldNames() (names []string) {
 }
 
 func (df *DataFrame) Copy() *DataFrame {
-	result := NewDataFrame("Copy of: " + df.Name)
-	names := df.FieldNames()
-	for _, name := range names {
-		result.Type[name] = df.Type[name]
-		result.Data[name] = make([]float64, df.N)
-		copy(result.Data[name], df.Data[name])
+	result := NewDataFrame(df.Name + "_copy")
+	for name, field := range df.Columns {
+		result.Columns[name] = field.Copy()
 	}
 	result.N = df.N
 	return result
@@ -40,10 +67,9 @@ func (df *DataFrame) Copy() *DataFrame {
 
 func NewDataFrame(name string) *DataFrame {
 	return &DataFrame{
-		Name: name,
-		N:    0,
-		Data: make(map[string][]float64),
-		Type: make(map[string]Field),
+		Name:    name,
+		N:       0,
+		Columns: make(map[string]Field),
 	}
 }
 
@@ -82,42 +108,39 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 			continue
 		}
 
-		values := make([]float64, n)
-		field := Field{}
+		field := NewField(n)
 
 		switch f.Type.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			field.Type = Int
+			field.Origin = 0
 			for j := 0; j < n; j++ {
-				values[j] = float64(v.Index(j).FieldByName(f.Name).Int())
+				field.Data[j] = float64(v.Index(j).FieldByName(f.Name).Int())
 			}
 		case reflect.String:
 			field.Type = String
+			field.Origin = 0
 			for j := 0; j < n; j++ {
 				s := v.Index(j).FieldByName(f.Name).String()
-				values[j] = float64(field.AddStr(s))
+				field.Data[j] = float64(field.AddStr(s))
 			}
-			df.Data[f.Name] = values
 		case reflect.Float32, reflect.Float64:
 			field.Type = Float
+			field.Origin = 0
 			for j := 0; j < n; j++ {
-				values[j] = v.Index(j).FieldByName(f.Name).Float()
+				field.Data[j] = v.Index(j).FieldByName(f.Name).Float()
 			}
-			df.Data[f.Name] = values
 		case reflect.Struct: // Checked above for beeing time.Time
 			field.Type = Time
 			if n > 0 {
-				field.T0 = v.Index(0).FieldByName(f.Name).Interface().(time.Time)
+				field.Origin = v.Index(0).FieldByName(f.Name).Interface().(time.Time).Unix()
 			}
 			for j := 0; j < n; j++ {
-				delta := v.Index(j).FieldByName(f.Name).Interface().(time.Time).Sub(field.T0)
-				values[j] = float64(delta)
+				t := v.Index(j).FieldByName(f.Name).Interface().(time.Time).Unix()
+				field.Data[j] = float64(t - field.Origin)
 			}
-		default:
-			continue
 		}
-		df.Data[f.Name] = values
-		df.Type[f.Name] = field
+		df.Columns[f.Name] = field
 
 		// println("newSOMDataFrame: added field Name =", f.Name, "   type =", f.Type.String())
 
@@ -144,40 +167,39 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 			continue
 		}
 
-		values := make([]float64, n)
-		field := Field{}
+		field := NewField(n)
 
 		switch mt.Out(0).Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			field.Type = Int
 			for j := 0; j < n; j++ {
-				values[j] = float64(m.Func.Call([]reflect.Value{v.Index(j)})[0].Int())
+				field.Data[j] = float64(m.Func.Call([]reflect.Value{v.Index(j)})[0].Int())
 			}
 		case reflect.String:
 			field.Type = String
 			for j := 0; j < n; j++ {
 				s := m.Func.Call([]reflect.Value{v.Index(j)})[0].String()
-				values[j] = float64(field.AddStr(s))
+				field.Data[j] = float64(field.AddStr(s))
 			}
 		case reflect.Float32, reflect.Float64:
 			field.Type = Float
 			for j := 0; j < n; j++ {
-				values[j] = m.Func.Call([]reflect.Value{v.Index(j)})[0].Float()
+				field.Data[j] = m.Func.Call([]reflect.Value{v.Index(j)})[0].Float()
 			}
 		case reflect.Struct: // checked above for beeing time.Time
 			field.Type = Float
 			if n > 0 {
-				field.T0 = m.Func.Call([]reflect.Value{v.Index(0)})[0].Interface().(time.Time)
+				field.Origin = m.Func.Call([]reflect.Value{v.Index(0)})[0].Interface().(time.Time).Unix()
 			}
 			for j := 0; j < n; j++ {
-				t1 := m.Func.Call([]reflect.Value{v.Index(j)})[0].Interface().(time.Time)
-				values[j] = float64(t1.Sub(field.T0))
+				t := m.Func.Call([]reflect.Value{v.Index(j)})[0].Interface().(time.Time).Unix()
+				field.Data[j] = float64(t - field.Origin)
 			}
 		default:
 			panic("Oooops")
 		}
 
-		df.Data[m.Name] = values
+		df.Columns[m.Name] = field
 
 		// println("newSOMDataFrame: added method Name =", m.Name, "   type =", df.Type[m.Name].String())
 	}
@@ -186,12 +208,6 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 	// v.Addr().MethodByName()
 
 	return df, nil
-}
-
-type Field struct {
-	Type FieldType
-	Str  []string // contains the string values
-	T0   time.Time
 }
 
 func (f Field) Discrete() bool { return f.Type.Discrete() }
@@ -214,11 +230,15 @@ func (f Field) StrIdx(s string) int {
 }
 
 func (f Field) Int(x float64) int64 {
-	switch f.Type {
-	case Int, Float, String:
-		return int64(x)
+	return int64(x) + f.Origin
+}
+
+func (f Field) AsInt() []int64 {
+	ret := make([]int64, len(f.Data))
+	for i, x := range f.Data {
+		ret[i] = f.Int(x)
 	}
-	panic("Ooops")
+	return ret
 }
 
 func (f Field) String(x float64) string {
@@ -226,23 +246,42 @@ func (f Field) String(x float64) string {
 	case Float:
 		return fmt.Sprintf("%f", x)
 	case Int:
-		return fmt.Sprintf("%d", math.Floor(x))
+		return fmt.Sprintf("%d", f.Int(x))
 	case Time:
-		t := f.Time(x)
-		return t.Format("2006-01-02 15:04:05")
+		return f.Time(x).Format("2006-01-02 15:04:05")
 	case String:
 		return f.Str[int(x)]
 	}
 	panic("Oooops")
 }
 
-func (f Field) Time(x float64) time.Time {
-	switch f.Type {
-	case Time:
-		delta := time.Duration(int64(x))
-		return f.T0.Add(delta)
+func (f Field) Strings(x []float64) []string {
+	ans := []string{}
+	for _, v := range x {
+		ans = append(ans, f.String(v))
 	}
-	panic("Oooops")
+	return ans
+}
+
+func (f Field) AsString() []string {
+	ret := make([]string, len(f.Data))
+	for i, x := range f.Data {
+		ret[i] = f.String(x)
+	}
+	return ret
+}
+
+func (f Field) Time(x float64) time.Time {
+	n := int64(x) + f.Origin
+	return time.Unix(n, 0)
+}
+
+func (f Field) AsTime() []time.Time {
+	ret := make([]time.Time, len(f.Data))
+	for i, x := range f.Data {
+		ret[i] = f.Time(x)
+	}
+	return ret
 }
 
 // FieldType represents the basisc type of a field.
@@ -271,23 +310,20 @@ func isTime(x reflect.Type) bool {
 }
 
 // Filter extracts all rows from df where field==value.
-// Value may be an integer or a string.  TODO: allow range function
+// TODO: allow ranges
 func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
 	if df == nil {
 		return nil
 	}
 
-	var floatVal float64
-
-	dfft, ok := df.Type[field]
+	dfft, ok := df.Columns[field]
 	if !ok {
+		// TODO: warn somhow...
 		return df.Copy()
 	}
-	if dfft.Type != Int && dfft.Type != String {
-		panic(fmt.Sprintf("Cannot filter by %q in data frame %q", field, df.Name))
-	}
 
-	// Make sure value has proper type.
+	// Convert generic value into the float used for comparison.
+	var floatVal float64
 	switch reflect.TypeOf(value).Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		floatVal = float64(reflect.ValueOf(value).Int())
@@ -297,23 +333,48 @@ func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
 			return nil
 		}
 		floatVal = float64(sidx)
+	case reflect.Float32, reflect.Float64:
+		floatVal = float64(reflect.ValueOf(value).Float())
+	case reflect.Struct:
+		if !isTime(reflect.TypeOf(value)) {
+			panic("Bad type of value" + reflect.TypeOf(value).String())
+		}
+		floatVal = float64(value.(time.Time).Unix() - dfft.Origin)
 	default:
 		panic("Bad type of value" + reflect.TypeOf(value).String())
 	}
 
 	result := NewDataFrame(fmt.Sprintf("%s|%s=%v", df.Name, field, value))
-	for n, t := range df.Type {
-		result.Type[n] = t
-	}
+
+	// How many rows will be in the result data frame?
+	col := df.Columns[field].Data
+	result.N = 0
 	for i := 0; i < df.N; i++ {
-		if df.Data[field][i] != floatVal {
+		if col[i] != floatVal {
 			continue
-		}
-		for n, _ := range df.Type {
-			result.Data[n] = append(result.Data[n], df.Data[n][i])
 		}
 		result.N++
 	}
+
+	// Actual filtering.
+	for name, field := range df.Columns {
+		f := NewField(result.N)
+		f.Type = field.Type
+		if f.Type == String && len(field.Str) > 0 {
+			f.Str = make([]string, len(field.Str))
+			copy(f.Str, field.Str)
+		}
+		n := 0
+		for i := 0; i < df.N; i++ {
+			if col[i] != floatVal {
+				continue
+			}
+			f.Data[n] = col[i]
+			n++
+		}
+		result.Columns[name] = f
+	}
+
 	return result
 }
 
@@ -326,11 +387,11 @@ func (p IntSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func SortInts(a []int64)              { sort.Sort(IntSlice(a)) }
 
 // Levels returns the levels of field.
-func Levels(df *DataFrame, field string) []interface{} {
+func Levels(df *DataFrame, field string) []float64 {
 	if df == nil {
 		return nil
 	}
-	t, ok := df.Type[field]
+	t, ok := df.Columns[field]
 	if !ok {
 		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
 	}
@@ -339,7 +400,7 @@ func Levels(df *DataFrame, field string) []interface{} {
 	}
 
 	uniques := make(map[float64]struct{})
-	column := df.Data[field]
+	column := df.Columns[field].Data
 	for _, v := range column {
 		uniques[v] = struct{}{}
 	}
@@ -351,11 +412,7 @@ func Levels(df *DataFrame, field string) []interface{} {
 	}
 	sort.Float64s(levels)
 
-	result := make([]interface{}, len(levels))
-	for i, v := range levels {
-		result[i] = v
-	}
-	return result
+	return levels
 }
 
 // MinMax returns the minimum and maximum element and their indixes.
@@ -363,7 +420,7 @@ func MinMax(df *DataFrame, field string) (minval, maxval float64, minidx, maxidx
 	if df == nil {
 		return 0, 0, -1, -1
 	}
-	_, ok := df.Type[field]
+	_, ok := df.Columns[field]
 	if !ok {
 		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
 	}
@@ -372,7 +429,7 @@ func MinMax(df *DataFrame, field string) (minval, maxval float64, minidx, maxidx
 		return 0, 0, -1, -1
 	}
 
-	column := df.Data[field]
+	column := df.Columns[field].Data
 	minval, maxval = column[0], column[0]
 	minidx, maxidx = 0, 0
 	for i := 1; i < df.N; i++ {
@@ -401,7 +458,8 @@ func (df *DataFrame) Print(out io.Writer) {
 	for i := 0; i < df.N; i++ {
 		fmt.Fprintf(w, "%d", i)
 		for _, name := range names {
-			fmt.Fprintf(w, "\t%v", df.Data[name][i])
+			field := df.Columns[name]
+			fmt.Fprintf(w, "\t%s", field.String(field.Data[i]))
 		}
 		fmt.Fprintln(w)
 	}

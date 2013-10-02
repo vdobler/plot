@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"reflect"
 	"time"
 )
 
@@ -48,28 +47,22 @@ func (p *Plot) Draw() {
 func (p *Plot) CreatePanels() {
 	// Process faceting: How many facets are there, how are they named
 	rows, cols := 1, 1
-	var cunq []interface{}
-	var runq []interface{}
+	var cunq []float64
+	var runq []float64
 
 	if p.Faceting.Columns != "" {
-		cunq = Levels(p.Data, p.Faceting.Columns)
-		t := reflect.TypeOf(cunq[0])
-		switch t.Kind() {
-		case reflect.Int64, reflect.String:
-		default:
-			panic("Cannot facet over " + t.String())
+		if f := p.Data.Columns[p.Faceting.Columns]; !f.Discrete() {
+			panic(fmt.Sprintf("Cannot facet over %s (type %s)", p.Faceting.Columns, f.Type.String()))
 		}
+		cunq = Levels(p.Data, p.Faceting.Columns)
 		cols = len(cunq)
 	}
 
 	if p.Faceting.Rows != "" {
-		runq = Levels(p.Data, p.Faceting.Rows)
-		t := reflect.TypeOf(runq[0])
-		switch t.Kind() {
-		case reflect.Int64, reflect.String:
-		default:
-			panic("Cannot facet over " + t.String())
+		if f := p.Data.Columns[p.Faceting.Rows]; !f.Discrete() {
+			panic(fmt.Sprintf("Cannot facet over %s (type %s)", p.Faceting.Columns, f.Type.String()))
 		}
+		runq = Levels(p.Data, p.Faceting.Rows)
 		rows = len(runq)
 	}
 
@@ -302,7 +295,6 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	}
 	field := mapping.X
 	min, max, _, _ := MinMax(data, field)
-	ft := data.Type[field]
 
 	var binWidth float64 = s.BinWidth
 	var numBins int
@@ -325,7 +317,7 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 
 	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
 	counts := make([]int64, numBins+1) // TODO: Buggy here
-	column := data.Data[field]
+	column := data.Columns[field].Data
 	maxcount := int64(0)
 	for i := 0; i < data.N; i++ {
 		bin := x2bin(column[i])
@@ -336,30 +328,47 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	}
 
 	result := NewDataFrame(fmt.Sprintf("%s binned by %s", data.Name, field))
-	result.Type["X"] = ft
-	result.Type["Count"] = Field{Type: Int}
-	result.Type["NCount"] = Field{Type: Float}
-	result.Type["Density"] = Field{Type: Float}
-	result.Type["NDensity"] = Field{Type: Float}
+	nr := 0
+	for _, count := range counts {
+		if count == 0 && s.Drop {
+			continue
+		}
+		nr++
+	}
+	X := NewField(nr)
+	Count := NewField(nr)
+	NCount := NewField(nr)
+	Density := NewField(nr)
+	NDensity := NewField(nr)
+	X.Type = data.Columns[field].Type
+	Count.Type = Int
+	NCount.Type = Float
+	Density.Type = Float
+	NDensity.Type = Float
+	i := 0
+	maxDensity := float64(0)
 	for bin, count := range counts {
 		if count == 0 && s.Drop {
 			continue
 		}
-		result.Data["X"] = append(result.Data["X"], bin2x(bin))
-		result.Data["Count"] = append(result.Data["Count"], float64(count))
-		result.Data["NCount"] = append(result.Data["NCount"], float64(0)) // TODO: here and next two
-		result.Data["Density"] = append(result.Data["Density"], float64(0))
-		result.Data["NDensity"] = append(result.Data["NDensity"], float64(0))
-		result.N++
+		X.Data[i] = bin2x(bin)
+		Count.Data[i] = float64(count)
+		NCount.Data[i] = float64(count) / float64(maxcount)
+		density := float64(count) / binWidth / float64(data.N)
+		Density.Data[i] = density
+		if density > maxDensity {
+			maxDensity = density
+		}
+
 	}
-	/*
-		res <- within(results, {
-		    count[is.na(count)] <- 0
-		    density <- count / width / sum(abs(count), na.rm=TRUE)
-		    ncount <- count / max(abs(count), na.rm=TRUE)
-		    ndensity <- density / max(abs(density), na.rm=TRUE)
-		  })
-	*/
+	i = 0
+	for _, count := range counts {
+		if count == 0 && s.Drop {
+			continue
+		}
+		NDensity.Data[i] = Density.Data[i] / maxDensity
+		i++
+	}
 
 	return result
 
