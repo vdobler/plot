@@ -65,6 +65,26 @@ func (df *DataFrame) Copy() *DataFrame {
 	return result
 }
 
+func (df *DataFrame) Rename(o, n string) {
+	if o == n {
+		return
+	}
+	col := df.Columns[o]
+	delete(df.Columns, o)
+	df.Columns[n] = col
+}
+
+func (df *DataFrame) Apply(field string, f func(float64) float64) {
+	if df.Columns[field].Type == String {
+		panic(fmt.Sprintf("Cannot transform String column %s in %s", field, df.Name))
+	}
+
+	column := df.Columns[field].Data
+	for i := 0; i < df.N; i++ {
+		column[i] = f(column[i])
+	}
+}
+
 func NewDataFrame(name string) *DataFrame {
 	return &DataFrame{
 		Name:    name,

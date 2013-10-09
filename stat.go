@@ -25,7 +25,7 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	if data == nil {
 		return nil
 	}
-	field := mapping.X
+	field := mapping["x"]
 	min, max, _, _ := MinMax(data, field)
 
 	var binWidth float64 = s.BinWidth

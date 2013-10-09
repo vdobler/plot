@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -26,6 +28,122 @@ type Plot struct {
 
 	// Panels are the different panels for faceting
 	Panels [][]Panel
+
+	Scales map[string]Scale
+
+	Theme Theme
+}
+
+// Scale provides position scales like x- and y-axis as well as color
+// or other scales.
+type Scale struct {
+	Discrete    bool
+	Type        string // pos (x/y), col/fill, size, type ... TODO: good like this?
+	ExpandToTic bool
+
+	Breaks []float64 // empty: auto
+	Levels []string  // empty: auto, different length than breaks: bug
+
+	// both 0: auto. Max > Min: manual
+	DomainMin float64
+	DomainMax float64
+
+	Transform *ScaleTransform
+
+	Color func(x float64) color.Color // color, fill
+	Pos   func(x float64) float64     // x, y, size
+	Style func(x float64) int         // point and line type
+}
+
+func contains(s []string, t string) bool {
+	for _, ss := range s {
+		if t == ss {
+			return true
+		}
+	}
+	return false
+}
+
+// Unfacetted plotting, Layers have no own data.
+func (p *Plot) Simple() {
+	for i, layer := range p.Layers {
+		if layer.Data == nil && len(layer.Aes) == 0 {
+			// This layer has no own data and no own aestetics:
+			// No need for own modifications
+			continue
+		}
+
+		// Set up data and aestetics mapping
+		if layer.Data == nil {
+			layer.Data = p.Data.Copy()
+		}
+		aes := layer.Aes
+		if len(aes) == 0 {
+			aes = p.Aes
+		}
+
+		// Map aestetics: Drop unused fields from data frame and
+		// rename data frame fields to used aes.
+		_, fields := aes.Used(false)
+		for _, f := range layer.Data.FieldNames() {
+			if contains(fields, f) {
+				continue
+			}
+			delete(layer.Data.Columns, f)
+		}
+		for a, f := range aes {
+			p.Data.Rename(f, a)
+		}
+
+		// TODO: Add group columns based on layer or plot grouping spez
+
+		// Transform scales. TODO: This is ugly
+		for aes := range p.Scales {
+			if trans := p.Scales[aes].Transform; trans != nil {
+				layer.Data.Apply(aes, trans.Trans)
+			}
+		}
+
+		p.Layers[i].Data = layer.Data
+	}
+
+	// Compute statistics
+	for i, layer := range p.Layers {
+		data := layer.Data
+		if data == nil {
+			data = p.Data
+		}
+
+		if layer.Stat == nil {
+			p.Layers[i].Data = data.Copy()
+		} else {
+			p.Layers[i].Data = layer.Stat.Apply(data, p.Aes)
+		}
+	}
+
+	// Construct geoms
+	for i, layer := range p.Layers {
+		i *= 2
+		_ = layer
+	}
+
+	/*
+		// Reparametrise. Skipped for the moment
+		for i, layer := range p.Layers {
+			// p.Layers[i].Data = layer.Geom.Reparametrise(p.Data)
+		}
+
+		// Apply position adjustment
+		for i, layer := range p.Layers {
+			if layer.Position == PosIdentity {
+				continue
+			}
+			// p.Layers[i].Data = adjustPosition(layer)
+		}
+	*/
+
+	// Retrain scales
+
 }
 
 func (p *Plot) Draw() {
@@ -156,13 +274,13 @@ type Theme struct {
 
 var DefaultTheme = Theme{
 	BoxAes: AesMapping{
-		Fill: "fixed: #ffffff",
-		Line: "fixed: 0",
+		"fill": "fixed: #cccccc",
+		"line": "fixed: 0",
 	},
 	PointAes: AesMapping{
-		Size:  "fixed: 5pt",
-		Shape: "fixed: 1",
-		Color: "fixed: #222222",
+		"size":  "fixed: 5pt",
+		"shape": "fixed: 1",
+		"color": "fixed: #222222",
 	},
 }
 
@@ -180,6 +298,22 @@ type Faceting struct {
 	FreeSpace string // as FreeScale but for size of panel
 }
 
+func UniqueStrings(s []string) (u []string) {
+	if len(s) <= 1 {
+		return s
+	}
+	sort.Strings(s)
+	t := s[0]
+	for i := 1; i <= len(s); i++ {
+		if s[i] == t {
+			continue
+		}
+		t = s[i]
+		u = append(u, t)
+	}
+	return u
+}
+
 // AesMapping controlls the mapping of fields of a data frame to aesthetics.
 // The zero value of AesMapping is the identity mapping.
 //
@@ -187,75 +321,58 @@ type Faceting struct {
 //     "<fieldname>"        map aesthetic to this field
 //     "fixed: <value>"     set aesthetics to the given value
 //     "stat: <fieldname>   map aesthetic to this field, but use the computed stat
-type AesMapping struct {
-	X     string
-	Y     string
-	Alpha string
-	Color string
-	Fill  string
-	Size  string
-	Shape string
-	Line  string
+type AesMapping map[string]string
 
-	Lower, Middle, Upper   string
-	Ymax, Ymin, Xmin, Xmax string
-}
-
-// Merge merges set values in all the as into am and returns the merged mapping.
-func (am AesMapping) Merge(as ...AesMapping) AesMapping {
-	for _, a := range as {
-		if a.X != "" {
-			am.X = a.X
-		}
-		if a.Y != "" {
-			am.Y = a.Y
-		}
-		if a.Alpha != "" {
-			am.Alpha = a.Alpha
-		}
-		if a.Color != "" {
-			am.Color = a.Color
-		}
-		if a.Fill != "" {
-			am.Fill = a.Fill
-		}
-		if a.Size != "" {
-			am.Size = a.Size
-		}
-		if a.Shape != "" {
-			am.Shape = a.Shape
-		}
-		if a.Line != "" {
-			am.Line = a.Line
-		}
-		if a.Lower != "" {
-			am.Lower = a.Lower
-		}
-		if a.Middle != "" {
-			am.Middle = a.Middle
-		}
-		if a.Upper != "" {
-			am.Upper = a.Upper
-		}
-		if a.Ymax != "" {
-			am.Ymax = a.Ymax
-		}
-		if a.Ymin != "" {
-			am.Ymin = a.Ymin
-		}
-		if a.Xmax != "" {
-			am.Xmax = a.Xmax
-		}
-		if a.Xmin != "" {
-			am.Xmin = a.Xmin
+func (m AesMapping) Used(includeAll bool) (aes, names []string) {
+	for a, n := range m {
+		aes = append(aes, a)
+		if includeAll || strings.Index(n, ":") == -1 {
+			names = append(names, n)
 		}
 	}
-	return am
+	sort.Strings(aes)
+	sort.Strings(names)
+	return aes, names
+}
+
+func (m AesMapping) Copy() AesMapping {
+	c := make(AesMapping, len(m))
+	for a, n := range m {
+		c[a] = n
+	}
+	return c
+}
+
+// Merge merges set values in all the ams into m and returns the merged mapping.
+func (m AesMapping) Merge(ams ...AesMapping) AesMapping {
+	merged := m.Copy()
+	for _, am := range ams {
+		for aes, fname := range am {
+			if _, ok := merged[aes]; !ok {
+				merged[aes] = fname
+			}
+		}
+	}
+	return merged
+}
+
+// Combine merges set values in all the ams into m and returns the merged mapping.
+// Later values in ams overwrite earlier ones or values in m.
+func (m AesMapping) Combine(ams ...AesMapping) AesMapping {
+	merged := m.Copy()
+	for _, am := range ams {
+		for aes, fname := range am {
+			merged[aes] = fname
+		}
+	}
+	return merged
 }
 
 // Layer represents one layer of data
 //
 type Layer struct {
+	Plot *Plot
+
 	// A nil Data will use the Data from the plot this Layer belongs to.
 	Data *DataFrame
 
@@ -272,19 +389,193 @@ type Layer struct {
 	// Aes is the aestetics mapping for this layer. Not every mapping is
 	// usefull for all Geoms.
 	Aes AesMapping
+
+	Position PositionAdjust
 }
 
-// Geom is a geometrical object, a type of visual for the plot.
-type Geom interface {
-	// Bounds computes the bounds of the given scale.
-	Bounds(data DataFrame, scale string) (min, max float64) // TODO: return type?
+type Viewport struct {
+	// The underlying image
 
-	// Render draws the Geom onto plot
-	Render(data DataFrame, aes AesMapping, plot Plot)
+	// The rectangel of this vp
+
+	// Functions to turn grob coordinates to pixel
+}
+
+type Grob interface {
+	Draw(vp Viewport)
+}
+
+type GrobLine struct {
+	x0, y0, x1, y1 float64
+	width          float64
+	style          LineStyle
+	color          color.Color
+}
+
+func (line GrobLine) Draw(vp Viewport) {
+}
+
+type GrobPoint struct {
+	x, y  float64
+	size  float64
+	style PointStyle
+	color color.Color
+}
+
+func (point GrobPoint) Draw(vp Viewport) {
+}
+
+type LineStyle int
+
+const (
+	BlankLine LineStyle = iota
+	SolidLine
+	DashedLine
+	DottedLine
+	DotDashLine
+	LongdashLine
+	TwodashLine
+)
+
+type PointStyle int
+
+const (
+	BlankPoint PointStyle = iota
+	CirclePoint
+	SquarePoint
+	DiamondPoint
+	DeltaPoint
+	NablaPoint
+	SolidCirclePoint
+	SolidSquarePoint
+	SolidDiamondPoint
+	SolidDeltaPoint
+	SolidNablaPoint
+	CrossPoint
+	PlusPoint
+	StarPoint
+)
+
+// Geom is a geometrical object, a type of visual for the plot.
+// Each geom.
+type Geom interface {
+	NeededSlots() []string
+	OptionalSlots() []string
+
+	// Render interpretes data according to m and produces Grobs.
+	// TODO: Grouping?
+	Render(p *Plot, data DataFrame, m AesMapping) []Grob
+}
+
+type GeomPoint struct {
+	Aes AesMapping
+}
+
+var BuiltinColors = map[string]color.RGBA{
+	"red":     color.RGBA{0xff, 0x00, 0x00, 0xff},
+	"green":   color.RGBA{0x00, 0xff, 0x00, 0xff},
+	"blue":    color.RGBA{0x00, 0x00, 0xff, 0xff},
+	"cyan":    color.RGBA{0x00, 0xff, 0xff, 0xff},
+	"magenta": color.RGBA{0xff, 0x00, 0xff, 0xff},
+	"yellow":  color.RGBA{0xff, 0xff, 0x00, 0xff},
+	"white":   color.RGBA{0xff, 0xff, 0xff, 0xff},
+	"gray20":  color.RGBA{0x33, 0x33, 0x33, 0xff},
+	"gray40":  color.RGBA{0x66, 0x66, 0x66, 0xff},
+	"gray":    color.RGBA{0x7f, 0x7f, 0x7f, 0xff},
+	"gray60":  color.RGBA{0x99, 0x99, 0x99, 0xff},
+	"gray80":  color.RGBA{0xcc, 0xcc, 0xcc, 0xff},
+	"black":   color.RGBA{0x00, 0x00, 0x00, 0xff},
+}
+
+func Hex2Color(s string) color.Color {
+	if strings.HasPrefix(s, "#") && len(s) >= 7 {
+		var r, g, b, a uint8
+		fmt.Sscanf(s[1:3], "%2x", &r)
+		fmt.Sscanf(s[3:5], "%2x", &g)
+		fmt.Sscanf(s[5:7], "%2x", &b)
+		a = 0xff
+		if len(s) >= 9 {
+			fmt.Sscanf(s[7:9], "%2x", &a)
+		}
+		return color.RGBA{r, g, b, a}
+	}
+	if col, ok := BuiltinColors[s]; ok {
+		return col
+	}
+
+	return color.RGBA{0xaa, 0x66, 0x77, 0x7f}
+}
+
+func (p GeomPoint) NeededSlots() []string   { return []string{"x", "y"} }
+func (p GeomPoint) OptionalSlots() []string { return []string{"color", "size", "type", "alpha"} }
+func (p GeomPoint) Render(plot *Plot, data DataFrame, m AesMapping) []Grob {
+	aes := m.Merge(p.Aes, plot.Theme.PointAes)
+	grobs := make([]Grob, data.N)
+	x, y := data.Columns[aes["x"]], data.Columns[aes["y"]]
+	for i := 0; i < data.N; i++ {
+		grobs[i] = GrobPoint{
+			x: x.Data[i],
+			y: y.Data[i],
+		}
+	}
+
+	if col, ok := aes["color"]; ok {
+		var colFunc func(DataFrame, int) color.Color
+		if strings.HasPrefix(col, "fixed: ") {
+			theColor := Hex2Color(col[7:])
+			colFunc = func(DataFrame, int) color.Color {
+				return theColor
+			}
+		} else {
+			colFunc = func(d DataFrame, i int) color.Color {
+				return plot.Scales["color"].Color(d.Columns[col].Data[i])
+			}
+		}
+		for i := 0; i < data.N; i++ {
+			point := grobs[i].(GrobPoint)
+			point.color = colFunc(data, i)
+			grobs[i] = point
+		}
+	}
+	return grobs
 }
 
 type GeomBar struct {
 }
+
+// -------------------------------------------------------------------------
+// Scale Transformations
+
+type ScaleTransform struct {
+	Trans   func(float64) float64
+	Inverse func(float64) float64
+	Format  func(float64, string) string
+}
+
+var Log10Scale = ScaleTransform{
+	Trans:   func(x float64) float64 { return math.Log10(x) },
+	Inverse: func(y float64) float64 { return math.Pow(10, y) },
+	Format:  func(y float64, s string) string { return fmt.Sprintf("10^{%s}", s) },
+}
+
+var IdentityScale = ScaleTransform{
+	Trans:   func(x float64) float64 { return x },
+	Inverse: func(y float64) float64 { return y },
+	Format:  func(y float64, s string) string { return s },
+}
+
+// -------------------------------------------------------------------------
+// Position Adjustments
+
+type PositionAdjust int
+
+const (
+	PosIdentity PositionAdjust = iota
+	PosJitter
+	PosStack
+	PosFill
+	PosDodge
+)
 
 /********************************************
 
