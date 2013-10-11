@@ -486,3 +486,35 @@ func (df *DataFrame) Print(out io.Writer) {
 	w.Flush()
 
 }
+
+// GroupingField constructs a new Field of type String with the same length
+// as data. The values are the concationation of the named columns.
+// The named columns in data must be discrete.
+func GroupingField(data *DataFrame, names []string) Field {
+	// Check names
+	for _, n := range names {
+		if f, ok := data.Columns[n]; !ok {
+			panic(fmt.Sprintf("Data frame %q has no column %q to group by.",
+				data.Name, n))
+		} else if !f.Discrete() {
+			panic(fmt.Sprintf("Column %q in data frame %q is of type %s and cannot be used for grouping",
+				n, data.Name, f.Type))
+		}
+	}
+
+	field := NewField(data.N)
+	field.Type = String
+	for i := 0; i < data.N; i++ {
+		group := ""
+		for _, name := range names {
+			f := data.Columns[name]
+			val := f.Data[i]
+			if group != "" {
+				group += " | " // TODO: ist this clever? No. Maybe int-Type?
+			}
+			group += f.String(val)
+		}
+		field.Data[i] = float64(field.AddStr(group))
+	}
+	return field
+}

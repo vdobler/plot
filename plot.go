@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,7 +25,7 @@ type Plot struct {
 	Aes AesMapping
 
 	// Layers contains all the layers displayed in the plot.
-	Layers []Layer
+	Layers []*Layer
 
 	// Panels are the different panels for faceting
 	Panels [][]Panel
@@ -64,59 +65,78 @@ func contains(s []string, t string) bool {
 	return false
 }
 
-// Unfacetted plotting, Layers have no own data.
-func (p *Plot) Simple() {
-	for i, layer := range p.Layers {
-		if layer.Data == nil && len(layer.Aes) == 0 {
-			// This layer has no own data and no own aestetics:
-			// No need for own modifications
-			continue
-		}
-
-		// Set up data and aestetics mapping
-		if layer.Data == nil {
-			layer.Data = p.Data.Copy()
-		}
-		aes := layer.Aes
-		if len(aes) == 0 {
-			aes = p.Aes
-		}
-
-		// Map aestetics: Drop unused fields from data frame and
-		// rename data frame fields to used aes.
-		_, fields := aes.Used(false)
-		for _, f := range layer.Data.FieldNames() {
-			if contains(fields, f) {
-				continue
-			}
-			delete(layer.Data.Columns, f)
-		}
-		for a, f := range aes {
-			p.Data.Rename(f, a)
-		}
-
-		// TODO: Add group columns based on layer or plot grouping spez
-
-		// Transform scales. TODO: This is ugly
-		for aes := range p.Scales {
-			if trans := p.Scales[aes].Transform; trans != nil {
-				layer.Data.Apply(aes, trans.Trans)
-			}
-		}
-
-		p.Layers[i].Data = layer.Data
+// PrepareData is the first step in generating a plot.
+// After preparing the data frame the following holds
+//   - Layer has a own data frame (maybe a copy of plots data frame)
+//   - A group column is added.
+//   - This data frame has no unused (aka not mapped to aesthetics)
+//     columns
+//   - The columns name are the aestectics (e.g. x, y, size, color...)
+//   - The columns have been transformed according to the
+//     ScaleTransform associated with x, y, size, ....
+func (layer *Layer) PrepareData(plot *Plot) {
+	// Set up data and aestetics mapping.
+	if layer.Data == nil {
+		layer.Data = plot.Data.Copy()
+	}
+	aes := layer.Aes
+	if len(aes) == 0 {
+		aes = plot.Aes
 	}
 
-	// Compute statistics
-	for i, layer := range p.Layers {
-		data := layer.Data
-		if data == nil {
-			data = p.Data
+	// Add group columns based on layer or grouping spez.
+	if g := aes["group"]; g == "" {
+		// Not set manually: Compute Cross product over all discrete columns.
+		var discrete []string
+		for _, name := range layer.Data.FieldNames() {
+			if layer.Data.Columns[name].Discrete() {
+				discrete = append(discrete, name)
+			}
 		}
+		layer.Data.Columns["group"] = GroupingField(layer.Data, discrete)
+		aes["group"] = "group"
+	} else {
+		// Set manually.
+		names := strings.Split(g, " ")
+		layer.Data.Columns["group"] = GroupingField(layer.Data, names)
+	}
 
-		if layer.Stat == nil {
-			p.Layers[i].Data = data.Copy()
-		} else {
+	// Map aestetics: Drop unused fields from data frame and
+	// rename data frame fields to used aes.
+	_, fields := aes.Used(false)
+	for _, f := range layer.Data.FieldNames() {
+		if contains(fields, f) {
+			continue
+		}
+		delete(layer.Data.Columns, f)
+	}
+	for a, f := range aes {
+		layer.Data.Rename(f, a)
+	}
+
+	// Transform scales. TODO: This is ugly
+	for aes := range plot.Scales {
+		if trans := plot.Scales[aes].Transform; trans != nil {
+			layer.Data.Apply(aes, trans.Trans)
+		}
+	}
+}
+
+// Unfacetted plotting, Layers have no own data.
+func (p *Plot) Simple() {
+	// Prepare data: Add grouping, map aestetics, clean data frame and
+	// apply scale transformations
+	for i := range p.Layers {
+		p.Layers[i].PrepareData(p)
+	}
+
+	// The second step: Compute statistics.
+	// If a layer has a statistical transform: Apply this transformation
+	// to the data frame of this layer.
+	//
+	for i, layer := range p.Layers {
+		if layer.Stat != nil {
+			data := layer.Data
 			p.Layers[i].Data = layer.Stat.Apply(data, p.Aes)
 		}
 	}
@@ -265,7 +285,7 @@ type Panel struct {
 	// Plot is the plot this panel belongs to
 	Plot *Plot
 
-	Layers []Layer
+	Layers []*Layer
 }
 
 type Theme struct {
@@ -456,6 +476,50 @@ const (
 	StarPoint
 )
 
+func String2PointStyle(s string) PointStyle {
+	n, err := strconv.Atoi(s)
+	if err == nil {
+		return PointStyle(n)
+	}
+	switch s {
+	case "circle":
+		return CirclePoint
+	case "square":
+		return SquarePoint
+	case "diamond":
+		return DiamondPoint
+	case "delta":
+		return DeltaPoint
+	case "nabla":
+		return NablaPoint
+	case "solid-circle":
+		return SolidCirclePoint
+	case "solid-square":
+		return SolidSquarePoint
+	case "solid-diamond":
+		return SolidDiamondPoint
+	case "solid-delta":
+		return SolidDeltaPoint
+	case "solid-nabla":
+		return SolidNablaPoint
+	case "cross":
+		return CrossPoint
+	case "plus":
+		return PlusPoint
+	case "star":
+		return StarPoint
+	}
+	return BlankPoint
+}
+
+func String2PointSize(s string) float64 {
+	n, err := strconv.Atoi(s)
+	if err == nil {
+		return float64(n)
+	}
+	return 6
+}
+
 // Geom is a geometrical object, a type of visual for the plot.
 // Each geom.
 type Geom interface {
@@ -509,33 +573,62 @@ func Hex2Color(s string) color.Color {
 func (p GeomPoint) NeededSlots() []string   { return []string{"x", "y"} }
 func (p GeomPoint) OptionalSlots() []string { return []string{"color", "size", "type", "alpha"} }
 func (p GeomPoint) Render(plot *Plot, data DataFrame, m AesMapping) []Grob {
-	aes := m.Merge(p.Aes, plot.Theme.PointAes)
-	grobs := make([]Grob, data.N)
+	// TODO: The size, color and style should be populated to data earlier?
+
+	aes := m.Merge(p.Aes, plot.Theme.PointAes, DefaultTheme.PointAes)
+	points := make([]GrobPoint, data.N)
 	x, y := data.Columns[aes["x"]], data.Columns[aes["y"]]
-	for i := 0; i < data.N; i++ {
-		grobs[i] = GrobPoint{
-			x: x.Data[i],
-			y: y.Data[i],
+
+	col := aes["color"]
+	var colFunc func(DataFrame, int) color.Color
+	if strings.HasPrefix(col, "fixed: ") {
+		theColor := Hex2Color(col[7:])
+		colFunc = func(DataFrame, int) color.Color {
+			return theColor
+		}
+	} else {
+		colFunc = func(d DataFrame, i int) color.Color {
+			return plot.Scales["color"].Color(d.Columns[col].Data[i])
 		}
 	}
 
-	if col, ok := aes["color"]; ok {
-		var colFunc func(DataFrame, int) color.Color
-		if strings.HasPrefix(col, "fixed: ") {
-			theColor := Hex2Color(col[7:])
-			colFunc = func(DataFrame, int) color.Color {
-				return theColor
-			}
-		} else {
-			colFunc = func(d DataFrame, i int) color.Color {
-				return plot.Scales["color"].Color(d.Columns[col].Data[i])
-			}
+	style := aes["style"]
+	var styleFunc func(DataFrame, int) PointStyle
+	if strings.HasPrefix(style, "fixed: ") {
+		theStyle := String2PointStyle(style[7:])
+		styleFunc = func(DataFrame, int) PointStyle {
+			return theStyle
 		}
-		for i := 0; i < data.N; i++ {
-			point := grobs[i].(GrobPoint)
-			point.color = colFunc(data, i)
-			grobs[i] = point
+	} else {
+		styleFunc = func(d DataFrame, i int) PointStyle {
+			return PointStyle(plot.Scales["pointstyle"].Style(d.Columns[style].Data[i]))
 		}
+	}
+
+	size := aes["size"]
+	var sizeFunc func(DataFrame, int) float64
+	if strings.HasPrefix(size, "fixed: ") {
+		theSize := String2PointSize(size[7:])
+		sizeFunc = func(DataFrame, int) float64 {
+			return theSize
+		}
+	} else {
+		sizeFunc = func(d DataFrame, i int) float64 {
+			return plot.Scales["size"].Pos(d.Columns[size].Data[i])
+		}
+	}
+
+	for i := 0; i < data.N; i++ {
+		points[i].x = x.Data[i]
+		points[i].y = y.Data[i]
+		points[i].color = colFunc(data, i)
+		points[i].size = sizeFunc(data, i)
+		points[i].style = styleFunc(data, i)
+	}
+
+	grobs := make([]Grob, len(points))
+	for i := range points {
+		grobs[i] = points[i]
 	}
 	return grobs
 }
