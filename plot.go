@@ -79,7 +79,7 @@ func (layer *Layer) PrepareData(plot *Plot) {
 	if layer.Data == nil {
 		layer.Data = plot.Data.Copy()
 	}
-	aes := layer.Aes
+	aes := layer.DataMapping
 	if len(aes) == 0 {
 		aes = plot.Aes
 	}
@@ -340,7 +340,6 @@ func UniqueStrings(s []string) (u []string) {
 // The following formats are used:
 //     "<fieldname>"        map aesthetic to this field
 //     "fixed: <value>"     set aesthetics to the given value
-//     "stat: <fieldname>   map aesthetic to this field, but use the computed stat
 type AesMapping map[string]string
 
 func (m AesMapping) Used(includeAll bool) (aes, names []string) {
@@ -395,20 +394,18 @@ type Layer struct {
 
 	// A nil Data will use the Data from the plot this Layer belongs to.
 	Data *DataFrame
+	Datamapping AesMapping
 
 	// Stat is the statistical transformation used in this layer.
 	Stat Stat
-
-	// StatData contains the result of applying Stat to Data if Stat
-	// is not nil.
-	StatData DataFrame
+	StatMapping AesMapping
 
 	// Geom is the geom to use for this layer
 	Geom Geom
+	GeomMapping AesMapping
 
 	// Aes is the aestetics mapping for this layer. Not every mapping is
 	// usefull for all Geoms.
-	Aes AesMapping
 
 	Position PositionAdjust
 }
