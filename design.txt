@@ -1,0 +1,90 @@
+Design of ggplot2 for Go
+========================
+
+Data Input
+----------
+
+Data input is either Slice-Of-Measurements (SOM) of the form
+
+    type Measurement struct {
+        Age    int
+        Weight float64
+        Height float64
+        Born   time.Time
+	Gender string
+    }
+    func (m Measurement) BMI() float64 {
+        return m.Weight/(m.Height*m.Height)
+    }
+
+    var data []Measurement
+
+or of the Collection-Of-Slices (COS) form
+    
+    type Measurement struct {
+        Age    []int
+        Weight []float64
+        Height []float64
+        Born   []time.Time
+        Gender []string
+    }
+    func (m Measurement) BMI(i int) float64 {
+        return m.Weight[i]/(m.Height[i]*m.Height[i])
+    }
+
+    var data Measurement
+
+Both forms are converted to a Data Frame which is basically a generic
+representation in the COS form. It resembles a R data frame.
+
+
+Plot Creation
+-------------
+
+Plot Creation is the following process:
+  
+  1.  Split data according to facetting specification.
+      Happens only on facetted plots, each facett is basically
+      treated as its own plot.
+      Result: A n x m data frames in Domain Units, original field names
+
+  2a.  Some or all fields are mapped to aestetics.
+      The mapped fields are transformed according to the
+      scale transformation (identitiy, log, sqrt, 1/x, ...)
+      Result: Data frame in Domain Units, unmapped fields have
+      original field names, other have the mapped aes name.
+  2b. Pre-Train Scales. Usefull if upcumming stat wants to knows what
+      the full x-range will be.
+
+  3.  A statistical transform is applied, typically some kind of
+      summary statistics like binning, boxplot or smoothing.
+      Result: A completely new data frame with new field names.
+      (Or the original input if no stat is requested.)
+
+  4a. Some (typically new) fields might be mapped to (new) aestetics.
+      Scale transformations are performed during this mapping.
+  4b. Rename fields to match expected input from Geom in next step.
+      Result: A data frame with field names suitable to be rendered
+      as a specific Geom.
+
+  5a. Apply position adjustments to geoms located at the same x-coordinate.
+  5b. Reparametrise Geoms. E.g. change description of a rectangle
+      from <centerX, centerY, Width, Height> to (xmin,ymin, xmax,ymax).
+      Reperametrise complex or domain specific geoms to a few
+      basic, primitive geoms.
+      Result: One (TODO: or several?) data frames in Domain Units
+      with field names suitable for primitive geoms.
+
+  6.  Train scales: Find min/max or set of levels accross layers and
+      facetts.
+
+  7.  Uses these scales to render geoms into Grobs (Graphical Objects).
+      Result: Structure of Grobs, coordinates/values in Range Units.
+
+  8a. Apply Coordinate Transformations: Interprete <x,y> pairs in
+      a Grob eg. as <y,x> (flip coordinates), as <r,ϑ> (polar coordiantes)
+      or <x,-y> (reversed y) and so on.
+      Interpolate lines by lots of small segemnts.
+  8b. Render into Viewport.
+
+  9.  Render Guides (Axes and Legends), render rest (title, facett boxes).

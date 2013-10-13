@@ -6,9 +6,24 @@ import (
 )
 
 // Stat is the interface of statistical transform.
+//
+// Statistical transform take a data frame and produce an other data frame.
+// This is typically done by "summarizing", "modeling" or "transforming"
+// the data in a statistically significant way.
+//
+// TODO: Location-/scale-invariance? f(x+a) = f(x)+a and f(x*a)=f(x*a) ??
 type Stat interface {
 	Apply(data *DataFrame, mapping AesMapping) *DataFrame
+
+	// NeededAes are the aestetics which must be present in the
+	// data frame. If not all needed aestetics are mapped this
+	// statistics cannot be applied.
 	NeededAes() []string
+
+	// OptionalAes are the aestetocs which are used by this
+	// statistics if present, but it is no error if they are
+	// not mapped.
+	OptionalAes() []string
 }
 
 type StatBin struct {
@@ -17,9 +32,8 @@ type StatBin struct {
 	Origin   *float64 // TODO: both optional fields as *float64?
 }
 
-func (StatBin) NeededAes() []string {
-	return []string{"x"}
-}
+func (StatBin) NeededAes() []string { return []string{"x"} }
+func (StatBin) OptionalAes() []string { return []string{"weight"} }
 
 func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	if data == nil {
@@ -113,9 +127,8 @@ type StatLinReq struct {
 	A, B float64
 }
 
-func (StatLinReq) NeededAes() []string {
-	return []string{"x", "y"}
-}
+func (StatLinReq) NeededAes() []string { return []string{"x", "y"}}
+func (StatBin) OptionalAes() []string { return []string{"weight"} }
 
 func (s *StatLinReq) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	if data == nil {
