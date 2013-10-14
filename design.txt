@@ -48,7 +48,7 @@ Plot Creation is the following process:
       treated as its own plot.
       Result: A n x m data frames in Domain Units, original field names
 
-  2a.  Some or all fields are mapped to aestetics.
+  2a. Some or all fields are mapped to aestetics.
       The mapped fields are transformed according to the
       scale transformation (identitiy, log, sqrt, 1/x, ...)
       Result: Data frame in Domain Units, unmapped fields have
@@ -88,3 +88,79 @@ Plot Creation is the following process:
   8b. Render into Viewport.
 
   9.  Render Guides (Axes and Legends), render rest (title, facett boxes).
+
+
+Statistical Transforms
+----------------------
+Basic idea is dead simple. Take one data frame and construct an other data
+frame which summarizes/describes the original one.
+
+Only complication: What to do if the input data frame contains more
+slots/fields than the stat can operate on?  Example: StatBin needs
+"x" and can use optional "weight". What to do if extra field "Gender"
+is present in input data frame?
+The following may happen:
+  -  Completely ignore the additional fields, pretend they are just
+     not there.
+  -  Fail. Do not process such data.
+  -  Group (facett) input data on the additional field(s) if the
+     additional fields are discrete.
+Ignore and fail are simple; grouping n the StatBin with extra Gender example:
+Split input data frame into two frames Gender=='f' and Gender=='m'
+apply Simple StatBin to both and combine both results afterwards to something
+like
+       x  count density Gender
+       5     0    0.0     m
+      10     6    0.2     m 
+      15    11    0.4     m
+      20     9    0.3     m
+       5     2    0.1     f
+      10     5    0.2     f
+      15    15    0.5     f
+      20     0    0.0     f
+
+The fields x and Gender where present in the input to StatBin, the fields
+count and density (also ncount and ndensity) are new fields.
+Gender is passed through pretty much unchanged while x is aggregated,
+here the center of the bins, i.e. none of the resulting x might occur
+in the input data frame.
+
+Statistical transforms cannot be chained.
+
+
+Aesthetics Mapping
+------------------
+
+Mapping of Aesthetics may happen before and after statistical transform.
+Example StatBin: x must be mapped before (as StatBin needs x as input)
+while mapping the generated count to y can happen only after computing
+the stat.
+
+What happens if one of the known real aesthetics is mapped:
+  -  The field in the data frame is renamed to the aesthetics
+     (e.g. BMI is replaced by y)
+  -  A scale is added for this aesthetics if not present in the plot.
+     Depending on the type of the data frame field this might be continous
+     or discrete.
+  -  The scale is pre-trained: TODO: really here? not own phase?
+
+
+
+Grobs, Graphical Objects
+------------------------
+
+Grobs are the primitive building blocks for graphics
+  -  Points.   <x,y, style, size, color, alpha>
+  -  Text.     <x,y, text, color, size, v-/h-align, font, alpha>
+  -  Lines.    <x0,y0,x1,y1,...,xn,yn, style, color, size/width>
+  -  Polygon   <x0,y0,x1,y1,...,xn,yn, fill, alpha>
+  -  Rectangle <xmin,ymin, xmax,ymax, style, color, width, fill, alpha>
+  -  Container <xmin,ymin, xmax,ymax>
+All grob coordinates are in the interval [0,1]. Container group grobs
+and provide a convenient way to reparam different grobs of e.g. one geom.
+
+TODO: Rectangle Needed? Achievable through Grob-Reparametrisation of
+Polygon but may be convenient...
+
+
+
