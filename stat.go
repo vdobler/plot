@@ -44,16 +44,18 @@ type StatBin struct {
 	Origin   *float64 // TODO: both optional fields as *float64?
 }
 
-func (StatBin) Name() string          { return "StatBin" }
-func (StatBin) NeededAes() []string   { return []string{"x"} }
-func (StatBin) OptionalAes() []string { return []string{"weight"} }
+var _ Stat = StatBin{}
 
-func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
+func (StatBin) Name() string                           { return "StatBin" }
+func (StatBin) NeededAes() []string                    { return []string{"x"} }
+func (StatBin) OptionalAes() []string                  { return []string{"weight"} }
+func (StatBin) ExtraFieldHandling() ExtraFieldHandling { return GroupOnExtraFields }
+
+func (s StatBin) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	if data == nil {
 		return nil
 	}
-	field := mapping["x"]
-	min, max, _, _ := MinMax(data, field)
+	min, max, _, _ := MinMax(data, "x")
 
 	var binWidth float64 = s.BinWidth
 	var numBins int
@@ -75,8 +77,8 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 }
 
 	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
-	counts := make([]int64, numBins+1) // TODO: Buggy here
-	column := data.Columns[field].Data
+	counts := make([]int64, numBins+1) // TODO: Buggy here?
+	column := data.Columns["x"].Data
 	maxcount := int64(0)
 	for i := 0; i < data.N; i++ {
 		bin := x2bin(column[i])
@@ -86,7 +88,7 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 		}
 	}
 
-	result := NewDataFrame(fmt.Sprintf("%s binned by %s", data.Name, field))
+	result := NewDataFrame(fmt.Sprintf("%s binned by x", data.Name))
 	nr := 0
 	for _, count := range counts {
 		if count == 0 && s.Drop {
@@ -94,12 +96,14 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 		}
 		nr++
 	}
+
+	result.N = nr
 	X := NewField(nr)
 	Count := NewField(nr)
 	NCount := NewField(nr)
 	Density := NewField(nr)
 	NDensity := NewField(nr)
-	X.Type = data.Columns[field].Type
+	X.Type = data.Columns["x"].Type
 	Count.Type = Int
 	NCount.Type = Float
 	Density.Type = Float
@@ -118,6 +122,8 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 		if density > maxDensity {
 			maxDensity = density
 		}
+		// println("bin =", bin, "   x =", bin2x(bin), "   count =", count)
+		i++
 
 	}
 	i = 0
@@ -128,6 +134,12 @@ func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 		NDensity.Data[i] = Density.Data[i] / maxDensity
 		i++
 	}
+
+	result.Columns["x"] = X
+	result.Columns["count"] = Count
+	result.Columns["ncount"] = NCount
+	result.Columns["density"] = Density
+	result.Columns["ndensity"] = NDensity
 
 	return result
 
@@ -140,16 +152,18 @@ type StatLinReq struct {
 	A, B float64
 }
 
-func (StatLinReq) Name() string          { return "StatLinReq" }
-func (StatLinReq) NeededAes() []string   { return []string{"x", "y"} }
-func (StatLinReq) OptionalAes() []string { return []string{"weight"} }
+var _ Stat = &StatLinReq{}
 
-func (s *StatLinReq) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
+func (StatLinReq) Name() string                           { return "StatLinReq" }
+func (StatLinReq) NeededAes() []string                    { return []string{"x", "y"} }
+func (StatLinReq) OptionalAes() []string                  { return []string{"weight"} }
+func (StatLinReq) ExtraFieldHandling() ExtraFieldHandling { return GroupOnExtraFields }
+
+func (s *StatLinReq) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	if data == nil {
 		return nil
 	}
-	fx, fy := "X", "Y" // BUG
-	xc, yc := data.Columns[fx].Data, data.Columns[fy].Data
+	xc, yc := data.Columns["x"].Data, data.Columns["y"].Data
 
 	xm, ym := float64(0), float64(0)
 	for i := 0; i < data.N; i++ {
@@ -181,7 +195,7 @@ func (s *StatLinReq) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	xf.Type, yf.Type = Float, Float
 	yminf.Type, ymaxf.Type = Float, Float
 
-	minx, maxx, _, _ := MinMax(data, fx)
+	minx, maxx, _, _ := MinMax(data, "x")
 	// TODO: maybe rescale to full range
 	xrange := maxx - minx
 	for i := 0; i < result.N; i++ {

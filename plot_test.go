@@ -26,13 +26,13 @@ func TestFaceting(t *testing.T) {
 func TestStatBin(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
 	sb := StatBin{BinWidth: 2, Drop: true}
-	mapping := AesMapping{"x": "BMI"}
-	bined := sb.Apply(df, mapping)
+	df.Rename("BMI", "x")
+	bined := sb.Apply(df, nil)
 	bined.Print(os.Stdout)
 
 	sb = StatBin{BinWidth: 5, Drop: false}
-	mapping = AesMapping{"x": "Age"}
-	bined = sb.Apply(df, mapping)
+	df.Rename("Age", "x")
+	bined = sb.Apply(df, nil)
 	bined.Print(os.Stdout)
 
 }
