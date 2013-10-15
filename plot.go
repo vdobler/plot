@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -35,6 +34,30 @@ type Plot struct {
 	Theme Theme
 }
 
+// Layer represents one layer of data
+//
+type Layer struct {
+	Plot *Plot
+	Name string
+
+	// A nil Data will use the Data from the plot this Layer belongs to.
+	Data        *DataFrame
+	DataMapping AesMapping
+
+	// Stat is the statistical transformation used in this layer.
+	Stat        Stat
+	StatMapping AesMapping
+
+	// Geom is the geom to use for this layer
+	Geom        Geom
+	RepGeom     Geom // The reparametrized geom
+	GeomMapping AesMapping
+
+	Position PositionAdjust
+
+	Grobs []Grob
+}
+
 func (p *Plot) Warnf(f string, args ...interface{}) {
 	fmt.Printf("Warning "+f, args...)
 }
@@ -57,9 +80,9 @@ type Scale struct {
 	Levels []string  // empty: auto, different length than breaks: bug
 
 	// Set up later after real training
-	Color func(x float64) color.Color // color, fill
-	Pos   func(x float64) float64     // x, y, size
-	Style func(x float64) int         // point and line type
+	Color func(x float64) color.Color // color, fill. Any color
+	Pos   func(x float64) float64     // x, y, size, alpha. In [0,1]
+	Style func(x float64) int         // point and line type. Range ???
 }
 
 // NewScale sets up a new scale for the given aesthetic, suitable for
@@ -98,6 +121,73 @@ func (s *Scale) Train(f Field) {
 	}
 }
 
+// Prepare initialises the remaining fields after training.
+func (s *Scale) Prepare() {
+	if s.Discrete {
+		s.PrepareDiscrete()
+	} else {
+		s.PrepareContinous()
+	}
+}
+
+func (s *Scale) PrepareDiscrete() {
+	panic("Implement me")
+}
+
+// TODO: Scale needs access to data frame field to print string values
+func (s *Scale) PrepareContinous() {
+	fullRange := s.DomainMax - s.DomainMin
+	expand := fullRange * 0.05
+	min, max := s.DomainMin-expand, s.DomainMax+expand
+	fullRange = max - min
+
+	// Set up breaks and labels
+	nb := 6
+	s.Breaks = make([]float64, nb+1)
+	s.Levels = make([]string, nb+1)
+	for i := range s.Breaks {
+		x := s.DomainMin + float64(i)*fullRange/float64(nb)
+		s.Breaks[i] = x
+	}
+	// TODO: ugly should be initialised to identitiy transform
+	var format func(float64, string) string
+	if t := s.Transform; t != nil {
+		format = t.Format
+	} else {
+		format = func(x float64, s string) string {
+			return fmt.Sprintf("%g", x)
+		}
+	}
+	for i, x := range s.Breaks {
+		s.Levels[i] = format(x, "")
+	}
+
+	// Produce mapping functions
+	s.Pos = func(x float64) float64 {
+		return (x - min) / fullRange
+	}
+	s.Color = func(x float64) color.Color {
+		c := s.Pos(x)
+		// TODO (a lot)
+		if c < 1/3 {
+			r := uint8(c * 3 * 255)
+			return color.RGBA{r, 0xff - r, 0, 0xff}
+		} else if c < 2/3 {
+			r := uint8((c - 1/3) * 3 * 255)
+			return color.RGBA{0, r, 0xff - r, 0xff}
+		} else {
+			r := uint8((c - 2/3) * 3 * 255)
+			return color.RGBA{0xff - r, 0, r, 0xff}
+		}
+		return color.RGBA{}
+	}
+	s.Style = func(x float64) int {
+		c := s.Pos(x)
+		c *= float64(StarPoint) // TODO
+		return int(c)
+	}
+}
+
 func contains(s []string, t string) bool {
 	for _, ss := range s {
 		if t == ss {
@@ -117,14 +207,14 @@ func contains(s []string, t string) bool {
 //     ScaleTransform associated with x, y, size, ....
 //
 // TODO: how about grouping? 69b0d2b contains grouping code.
-func (layer *Layer) PrepareData(plot *Plot) {
+func (layer *Layer) PrepareData() {
 	// Set up data and aestetics mapping.
 	if layer.Data == nil {
-		layer.Data = plot.Data.Copy()
+		layer.Data = layer.Plot.Data.Copy()
 	}
 	aes := layer.DataMapping
 	if len(aes) == 0 {
-		aes = plot.Aes
+		aes = layer.Plot.Aes
 	}
 
 	// Drop all unused (unmapped) fields in the data frame.
@@ -141,11 +231,18 @@ func (layer *Layer) PrepareData(plot *Plot) {
 		layer.Data.Rename(f, a)
 	}
 
+	layer.Plot.PrepareScales(layer.Data, aes)
+}
+
+// PrepareScales makes sure plot contains all sclaes needed for the
+// aesthetics in aes, the data is scale transformed if requested by the
+// scale and the scales are pre-trained.
+func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 	// Add scale for these aesthetics if not jet set up.
 	for a := range aes {
 		if _, ok := plot.Scales[a]; !ok {
 			// Add appropriate scale.
-			plot.Scales[a] = NewScale(a, layer.Data.Columns[a])
+			plot.Scales[a] = NewScale(a, data.Columns[a])
 		}
 	}
 
@@ -153,7 +250,7 @@ func (layer *Layer) PrepareData(plot *Plot) {
 	for a := range aes {
 		scale := plot.Scales[a]
 		if scale.Transform != nil {
-			field := layer.Data.Columns[a]
+			field := data.Columns[a]
 			field.Apply(scale.Transform.Trans)
 		}
 	}
@@ -161,12 +258,12 @@ func (layer *Layer) PrepareData(plot *Plot) {
 	// Pre-train scales
 	for a := range aes {
 		scale := plot.Scales[a]
-		scale.Train(layer.Data.Columns[a])
+		scale.Train(data.Columns[a])
 	}
 }
 
 // ComputeStatistics computes the statistical transform. Might be the identity.
-func (layer *Layer) ComputeStatistics(plot *Plot) {
+func (layer *Layer) ComputeStatistics() {
 	if layer.Stat == nil {
 		return // The identity statistical transformation.
 	}
@@ -176,7 +273,7 @@ func (layer *Layer) ComputeStatistics(plot *Plot) {
 	needed := layer.Stat.NeededAes()
 	for _, aes := range needed {
 		if _, ok := layer.Data.Columns[aes]; !ok {
-			plot.Warnf("Stat %s in Layer %s needs column %s",
+			layer.Plot.Warnf("Stat %s in Layer %s needs column %s",
 				layer.Stat.Name(), layer.Name, aes)
 			// TODO: more cleanup?
 			layer.Geom = nil // Don't draw anything.
@@ -184,17 +281,17 @@ func (layer *Layer) ComputeStatistics(plot *Plot) {
 		}
 	}
 
-	// Handling of excess fields.
+	// Handling of excess fields. TODO: Massive refactoring needed.
 	usedByStat := NewStringSetFrom(needed)
 	usedByStat.Join(NewStringSetFrom(layer.Stat.OptionalAes()))
 	fields := NewStringSetFrom(layer.Data.FieldNames())
 	fields.Remove(usedByStat)
 	handling := layer.Stat.ExtraFieldHandling()
 	if len(fields) == 0 || handling == IgnoreExtraFields {
-		layer.Data = layer.Stat.Apply(layer.Data, plot)
+		layer.Data = layer.Stat.Apply(layer.Data, layer.Plot)
 	} else {
 		if handling == FailOnExtraFields {
-			plot.Warnf("Stat %s in Layer %s cannot cope with excess fields %v",
+			layer.Plot.Warnf("Stat %s in Layer %s cannot cope with excess fields %v",
 				layer.Stat.Name(), layer.Name, fields.Elements())
 			// TODO: more cleanup?
 			layer.Geom = nil // Don't draw anything.
@@ -204,7 +301,7 @@ func (layer *Layer) ComputeStatistics(plot *Plot) {
 		// Else, make sure all excess fields are discrete.
 		for _, f := range fields.Elements() {
 			if !layer.Data.Columns[f].Discrete() {
-				plot.Warnf("Stat %s in Layer %s cannot cope with continous excess fields %s",
+				layer.Plot.Warnf("Stat %s in Layer %s cannot cope with continous excess fields %s",
 					layer.Stat.Name(), layer.Name, f)
 				// TODO: more cleanup?
 				layer.Geom = nil // Don't draw anything.
@@ -221,7 +318,7 @@ func (layer *Layer) ComputeStatistics(plot *Plot) {
 		for i, level := range levels.Elements() {
 			df := Filter(layer.Data, ef, level)
 			delete(df.Columns, ef)
-			res := layer.Stat.Apply(df, plot)
+			res := layer.Stat.Apply(df, layer.Plot)
 			res.Columns[ef] = f.Const(level, res.N)
 			if i == 0 {
 				layer.Data = res
@@ -232,48 +329,100 @@ func (layer *Layer) ComputeStatistics(plot *Plot) {
 
 	}
 
+	// Now we have a new data frame with possible new columns.
+	// These may be mapped to plot aestetics by plot.StatMapping.
+	// Do this now.
+	if len(layer.StatMapping) == 0 {
+		return
+	}
+	layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
+
 	return
 }
 
+// ConstructGeoms sets up the geoms so that they can be rendered. This includes
+// an optional renaming of stat-generated fields to geom-understandable fields,
+// applying positional adjustment to same-x geoms and reparametrization to
+// fundamental geoms.
+//
+// TODO: Should 5a and 5b be exchanged?
+func (layer *Layer) ConstructGeoms() {
+	if layer.Geom == nil {
+		layer.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
+		return
+	}
+
+	// Rename fields produces by statistical transform to names
+	// the geom understands. (Step 4b.)
+	// TODO: When to set e.g. color to a certain value?
+	for aes, field := range layer.GeomMapping {
+		layer.Data.Rename(field, aes)
+	}
+
+	// Make sure all needed slots are present in the data frame
+	slots := NewStringSetFrom(layer.Geom.NeededSlots())
+	dfSlots := NewStringSetFrom(layer.Data.FieldNames())
+	slots.Remove(dfSlots)
+	if len(slots) > 0 {
+		layer.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
+			layer.Geom.Name(), layer.Name, slots.Elements())
+		layer.Geom = nil
+		return
+	}
+
+	// (Step 5a)
+	layer.Geom.AdjustPosition(layer.Data, layer.Position)
+
+	// (Step 5b)
+	layer.RepGeom = layer.Geom.Reparametrize(layer.Data)
+}
+
 // Unfacetted plotting, Layers have no own data.
-func (p *Plot) Simple() {
+func (plot *Plot) Simple() {
+	// Make sure all layers know their parent plot / and or panel (TODO)
+	for i := range plot.Layers {
+		plot.Layers[i].Plot = plot
+	}
+
 	// Prepare data: map aestetics, add scales, clean data frame and
-	// apply scale transformations. Mapped scales are pre-trained
-	for _, layer := range p.Layers {
-		layer.PrepareData(p)
+	// apply scale transformations. Mapped scales are pre-trained.
+	// (Steps 2a and 2b in design.)
+	for _, layer := range plot.Layers {
+		layer.PrepareData()
 	}
 
 	// The second step: Compute statistics.
 	// If a layer has a statistical transform: Apply this transformation
 	// to the data frame of this layer.
-	//
-	for _, layer := range p.Layers {
-		layer.ComputeStatistics(p)
+	// (Step 3 and 4a in design)
+	for _, layer := range plot.Layers {
+		layer.ComputeStatistics()
 	}
 
 	// Construct geoms
-	for i, layer := range p.Layers {
-		i *= 2
-		_ = layer
+	// (Step 4b, 5a and 5b in design)
+	for _, layer := range plot.Layers {
+		layer.ConstructGeoms()
 	}
 
-	/*
-		// Reparametrise. Skipped for the moment
-		for i, layer := range p.Layers {
-			// p.Layers[i].Data = layer.Geom.Reparametrise(p.Data)
-		}
-
-		// Apply position adjustment
-		for i, layer := range p.Layers {
-			if layer.Position == PosIdentity {
-				continue
+	// Retrain scales. (Step 6)
+	for aes, scale := range plot.Scales {
+		for _, layer := range plot.Layers {
+			if col, ok := layer.Data.Columns[aes]; ok {
+				scale.Train(col)
 			}
-			// p.Layers[i].Data = adjustPosition(layer)
 		}
-	*/
+		scale.Prepare()
+	}
 
-	// Retrain scales
-
+	// Render Geoms to Grobs using scales (Step7).
+	for _, layer := range plot.Layers {
+		if layer.RepGeom != nil {
+			data := layer.Data
+			aes := layer.Geom.Aes(plot)
+			layer.Grobs = layer.RepGeom.Render(plot, data, aes)
+		}
+	}
 }
 
 func (p *Plot) Draw() {
@@ -497,30 +646,6 @@ func (m AesMapping) Combine(ams ...AesMapping) AesMapping {
 	return merged
 }
 
-// Layer represents one layer of data
-//
-type Layer struct {
-	Plot *Plot
-	Name string
-
-	// A nil Data will use the Data from the plot this Layer belongs to.
-	Data        *DataFrame
-	DataMapping AesMapping
-
-	// Stat is the statistical transformation used in this layer.
-	Stat        Stat
-	StatMapping AesMapping
-
-	// Geom is the geom to use for this layer
-	Geom        Geom
-	GeomMapping AesMapping
-
-	// Aes is the aestetics mapping for this layer. Not every mapping is
-	// usefull for all Geoms.
-
-	Position PositionAdjust
-}
-
 type Viewport struct {
 	// The underlying image
 
@@ -536,7 +661,7 @@ type Grob interface {
 type GrobLine struct {
 	x0, y0, x1, y1 float64
 	width          float64
-	style          LineStyle
+	style          LineType
 	color          color.Color
 }
 
@@ -546,202 +671,11 @@ func (line GrobLine) Draw(vp Viewport) {
 type GrobPoint struct {
 	x, y  float64
 	size  float64
-	style PointStyle
+	shape PointShape
 	color color.Color
 }
 
 func (point GrobPoint) Draw(vp Viewport) {
-}
-
-type LineStyle int
-
-const (
-	BlankLine LineStyle = iota
-	SolidLine
-	DashedLine
-	DottedLine
-	DotDashLine
-	LongdashLine
-	TwodashLine
-)
-
-type PointStyle int
-
-const (
-	BlankPoint PointStyle = iota
-	CirclePoint
-	SquarePoint
-	DiamondPoint
-	DeltaPoint
-	NablaPoint
-	SolidCirclePoint
-	SolidSquarePoint
-	SolidDiamondPoint
-	SolidDeltaPoint
-	SolidNablaPoint
-	CrossPoint
-	PlusPoint
-	StarPoint
-)
-
-func String2PointStyle(s string) PointStyle {
-	n, err := strconv.Atoi(s)
-	if err == nil {
-		return PointStyle(n)
-	}
-	switch s {
-	case "circle":
-		return CirclePoint
-	case "square":
-		return SquarePoint
-	case "diamond":
-		return DiamondPoint
-	case "delta":
-		return DeltaPoint
-	case "nabla":
-		return NablaPoint
-	case "solid-circle":
-		return SolidCirclePoint
-	case "solid-square":
-		return SolidSquarePoint
-	case "solid-diamond":
-		return SolidDiamondPoint
-	case "solid-delta":
-		return SolidDeltaPoint
-	case "solid-nabla":
-		return SolidNablaPoint
-	case "cross":
-		return CrossPoint
-	case "plus":
-		return PlusPoint
-	case "star":
-		return StarPoint
-	}
-	return BlankPoint
-}
-
-func String2PointSize(s string) float64 {
-	n, err := strconv.Atoi(s)
-	if err == nil {
-		return float64(n)
-	}
-	return 6
-}
-
-// Geom is a geometrical object, a type of visual for the plot.
-// Each geom.
-type Geom interface {
-	NeededSlots() []string
-	OptionalSlots() []string
-
-	// Render interpretes data according to m and produces Grobs.
-	// TODO: Grouping?
-	Render(p *Plot, data DataFrame, m AesMapping) []Grob
-}
-
-type GeomPoint struct {
-	Aes AesMapping
-}
-
-var BuiltinColors = map[string]color.RGBA{
-	"red":     color.RGBA{0xff, 0x00, 0x00, 0xff},
-	"green":   color.RGBA{0x00, 0xff, 0x00, 0xff},
-	"blue":    color.RGBA{0x00, 0x00, 0xff, 0xff},
-	"cyan":    color.RGBA{0x00, 0xff, 0xff, 0xff},
-	"magenta": color.RGBA{0xff, 0x00, 0xff, 0xff},
-	"yellow":  color.RGBA{0xff, 0xff, 0x00, 0xff},
-	"white":   color.RGBA{0xff, 0xff, 0xff, 0xff},
-	"gray20":  color.RGBA{0x33, 0x33, 0x33, 0xff},
-	"gray40":  color.RGBA{0x66, 0x66, 0x66, 0xff},
-	"gray":    color.RGBA{0x7f, 0x7f, 0x7f, 0xff},
-	"gray60":  color.RGBA{0x99, 0x99, 0x99, 0xff},
-	"gray80":  color.RGBA{0xcc, 0xcc, 0xcc, 0xff},
-	"black":   color.RGBA{0x00, 0x00, 0x00, 0xff},
-}
-
-func Hex2Color(s string) color.Color {
-	if strings.HasPrefix(s, "#") && len(s) >= 7 {
-		var r, g, b, a uint8
-		fmt.Sscanf(s[1:3], "%2x", &r)
-		fmt.Sscanf(s[3:5], "%2x", &g)
-		fmt.Sscanf(s[5:7], "%2x", &b)
-		a = 0xff
-		if len(s) >= 9 {
-			fmt.Sscanf(s[7:9], "%2x", &a)
-		}
-		return color.RGBA{r, g, b, a}
-	}
-	if col, ok := BuiltinColors[s]; ok {
-		return col
-	}
-
-	return color.RGBA{0xaa, 0x66, 0x77, 0x7f}
-}
-
-func (p GeomPoint) NeededSlots() []string   { return []string{"x", "y"} }
-func (p GeomPoint) OptionalSlots() []string { return []string{"color", "size", "type", "alpha"} }
-func (p GeomPoint) Render(plot *Plot, data DataFrame, m AesMapping) []Grob {
-	// TODO: The size, color and style should be populated to data earlier?
-
-	aes := m.Merge(p.Aes, plot.Theme.PointAes, DefaultTheme.PointAes)
-	points := make([]GrobPoint, data.N)
-	x, y := data.Columns[aes["x"]], data.Columns[aes["y"]]
-
-	col := aes["color"]
-	var colFunc func(DataFrame, int) color.Color
-	if strings.HasPrefix(col, "fixed: ") {
-		theColor := Hex2Color(col[7:])
-		colFunc = func(DataFrame, int) color.Color {
-			return theColor
-		}
-	} else {
-		colFunc = func(d DataFrame, i int) color.Color {
-			return plot.Scales["color"].Color(d.Columns[col].Data[i])
-		}
-	}
-
-	style := aes["style"]
-	var styleFunc func(DataFrame, int) PointStyle
-	if strings.HasPrefix(style, "fixed: ") {
-		theStyle := String2PointStyle(style[7:])
-		styleFunc = func(DataFrame, int) PointStyle {
-			return theStyle
-		}
-	} else {
-		styleFunc = func(d DataFrame, i int) PointStyle {
-			return PointStyle(plot.Scales["pointstyle"].Style(d.Columns[style].Data[i]))
-		}
-	}
-
-	size := aes["size"]
-	var sizeFunc func(DataFrame, int) float64
-	if strings.HasPrefix(size, "fixed: ") {
-		theSize := String2PointSize(size[7:])
-		sizeFunc = func(DataFrame, int) float64 {
-			return theSize
-		}
-	} else {
-		sizeFunc = func(d DataFrame, i int) float64 {
-			return plot.Scales["size"].Pos(d.Columns[size].Data[i])
-		}
-	}
-
-	for i := 0; i < data.N; i++ {
-		points[i].x = x.Data[i]
-		points[i].y = y.Data[i]
-		points[i].color = colFunc(data, i)
-		points[i].size = sizeFunc(data, i)
-		points[i].style = styleFunc(data, i)
-	}
-
-	grobs := make([]Grob, len(points))
-	for i := range points {
-		grobs[i] = points[i]
-	}
-	return grobs
-}
-
-type GeomBar struct {
 }
 
 // -------------------------------------------------------------------------

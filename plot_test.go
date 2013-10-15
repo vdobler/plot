@@ -51,7 +51,7 @@ func TestHex2Color(t *testing.T) {
 	}
 
 	for i, tc := range tests {
-		got := Hex2Color(tc.s)
+		got := String2Color(tc.s)
 		rg, gg, bg, ag := got.RGBA()
 		rw, gw, bw, aw := tc.c.RGBA()
 		if rg != rw || gg != gw || bg != bw || ag != aw {

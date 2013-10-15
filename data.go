@@ -19,6 +19,11 @@ type DataFrame struct {
 	Columns map[string]Field
 }
 
+func (df *DataFrame) Has(field string) bool {
+	_, has := df.Columns[field]
+	return has
+}
+
 func (df *DataFrame) Append(a *DataFrame) {
 	names := df.FieldNames()
 	dfn := NewStringSetFrom(names)
