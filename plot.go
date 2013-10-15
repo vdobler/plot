@@ -30,9 +30,13 @@ type Plot struct {
 	// Panels are the different panels for faceting
 	Panels [][]Panel
 
-	Scales map[string]Scale
+	Scales map[string]*Scale
 
 	Theme Theme
+}
+
+func (p *Plot) Warnf(f string, args ...interface{}) {
+	fmt.Printf("Warning "+f, args...)
 }
 
 // Scale provides position scales like x- and y-axis as well as color
@@ -42,18 +46,56 @@ type Scale struct {
 	Type        string // pos (x/y), col/fill, size, type ... TODO: good like this?
 	ExpandToTic bool
 
-	Breaks []float64 // empty: auto
-	Levels []string  // empty: auto, different length than breaks: bug
-
-	// both 0: auto. Max > Min: manual
-	DomainMin float64
-	DomainMax float64
+	DomainMin    float64
+	DomainMax    float64
+	DomainLevels FloatSet
 
 	Transform *ScaleTransform
 
+	// Also set up after training.
+	Breaks []float64 // empty: auto
+	Levels []string  // empty: auto, different length than breaks: bug
+
+	// Set up later after real training
 	Color func(x float64) color.Color // color, fill
 	Pos   func(x float64) float64     // x, y, size
 	Style func(x float64) int         // point and line type
+}
+
+// NewScale sets up a new scale for the given aesthetic, suitable for
+// the given data in field.
+func NewScale(aesthetic string, field Field) *Scale {
+	scale := Scale{}
+	scale.Discrete = field.Discrete()
+	scale.Type = aesthetic
+	scale.DomainMin = math.Inf(+1)
+	scale.DomainMax = math.Inf(-1)
+	scale.DomainLevels = NewFloatSet()
+
+	return &scale
+}
+
+// Train updates the domain ranges of s according to the data found in f.
+func (s *Scale) Train(f Field) {
+	if f.Discrete() {
+		// TODO: this depends on using the same StrIdx.
+		// Maybe there should be a single StrIdx per plot.
+		// This would internalize string valuies properly.
+		s.DomainLevels.Join(f.Levels())
+	} else {
+		// Continous data.
+		min, max, mini, maxi := f.MinMax()
+		if mini != -1 {
+			if min < s.DomainMin {
+				s.DomainMin = min
+			}
+		}
+		if maxi != -1 {
+			if max > s.DomainMax {
+				s.DomainMax = max
+			}
+		}
+	}
 }
 
 func contains(s []string, t string) bool {
@@ -68,12 +110,13 @@ func contains(s []string, t string) bool {
 // PrepareData is the first step in generating a plot.
 // After preparing the data frame the following holds
 //   - Layer has a own data frame (maybe a copy of plots data frame)
-//   - A group column is added.
 //   - This data frame has no unused (aka not mapped to aesthetics)
 //     columns
 //   - The columns name are the aestectics (e.g. x, y, size, color...)
 //   - The columns have been transformed according to the
 //     ScaleTransform associated with x, y, size, ....
+//
+// TODO: how about grouping? 69b0d2b contains grouping code.
 func (layer *Layer) PrepareData(plot *Plot) {
 	// Set up data and aestetics mapping.
 	if layer.Data == nil {
@@ -84,25 +127,7 @@ func (layer *Layer) PrepareData(plot *Plot) {
 		aes = plot.Aes
 	}
 
-	// Add group columns based on layer or grouping spez.
-	if g := aes["group"]; g == "" {
-		// Not set manually: Compute Cross product over all discrete columns.
-		var discrete []string
-		for _, name := range layer.Data.FieldNames() {
-			if layer.Data.Columns[name].Discrete() {
-				discrete = append(discrete, name)
-			}
-		}
-		layer.Data.Columns["group"] = GroupingField(layer.Data, discrete)
-		aes["group"] = "group"
-	} else {
-		// Set manually.
-		names := strings.Split(g, " ")
-		layer.Data.Columns["group"] = GroupingField(layer.Data, names)
-	}
-
-	// Map aestetics: Drop unused fields from data frame and
-	// rename data frame fields to used aes.
+	// Drop all unused (unmapped) fields in the data frame.
 	_, fields := aes.Used(false)
 	for _, f := range layer.Data.FieldNames() {
 		if contains(fields, f) {
@@ -110,35 +135,120 @@ func (layer *Layer) PrepareData(plot *Plot) {
 		}
 		delete(layer.Data.Columns, f)
 	}
+
+	// Rename mapped fields to their aestethic name
 	for a, f := range aes {
 		layer.Data.Rename(f, a)
 	}
 
-	// Transform scales. TODO: This is ugly
-	for aes := range plot.Scales {
-		if trans := plot.Scales[aes].Transform; trans != nil {
-			layer.Data.Apply(aes, trans.Trans)
+	// Add scale for these aesthetics if not jet set up.
+	for a := range aes {
+		if _, ok := plot.Scales[a]; !ok {
+			// Add appropriate scale.
+			plot.Scales[a] = NewScale(a, layer.Data.Columns[a])
 		}
 	}
+
+	// Transform scales if needed.
+	for a := range aes {
+		scale := plot.Scales[a]
+		if scale.Transform != nil {
+			field := layer.Data.Columns[a]
+			field.Apply(scale.Transform.Trans)
+		}
+	}
+
+	// Pre-train scales
+	for a := range aes {
+		scale := plot.Scales[a]
+		scale.Train(layer.Data.Columns[a])
+	}
+}
+
+// ComputeStatistics computes the statistical transform. Might be the identity.
+func (layer *Layer) ComputeStatistics(plot *Plot) {
+	if layer.Stat == nil {
+		return // The identity statistical transformation.
+	}
+
+	// Make sure all needed aesthetics (columns) are present in
+	// our data frame.
+	needed := layer.Stat.NeededAes()
+	for _, aes := range needed {
+		if _, ok := layer.Data.Columns[aes]; !ok {
+			plot.Warnf("Stat %s in Layer %s needs column %s",
+				layer.Stat.Name(), layer.Name, aes)
+			// TODO: more cleanup?
+			layer.Geom = nil // Don't draw anything.
+			return
+		}
+	}
+
+	// Handling of excess fields.
+	usedByStat := NewStringSetFrom(needed)
+	usedByStat.Join(NewStringSetFrom(layer.Stat.OptionalAes()))
+	fields := NewStringSetFrom(layer.Data.FieldNames())
+	fields.Remove(usedByStat)
+	handling := layer.Stat.ExtraFieldHandling()
+	if len(fields) == 0 || handling == IgnoreExtraFields {
+		layer.Data = layer.Stat.Apply(layer.Data, plot)
+	} else {
+		if handling == FailOnExtraFields {
+			plot.Warnf("Stat %s in Layer %s cannot cope with excess fields %v",
+				layer.Stat.Name(), layer.Name, fields.Elements())
+			// TODO: more cleanup?
+			layer.Geom = nil // Don't draw anything.
+			return
+		}
+
+		// Else, make sure all excess fields are discrete.
+		for _, f := range fields.Elements() {
+			if !layer.Data.Columns[f].Discrete() {
+				plot.Warnf("Stat %s in Layer %s cannot cope with continous excess fields %s",
+					layer.Stat.Name(), layer.Name, f)
+				// TODO: more cleanup?
+				layer.Geom = nil // Don't draw anything.
+				return
+			}
+		}
+
+		if len(fields) > 1 {
+			panic("Implement me")
+		}
+		ef := fields.Elements()[0]
+		f := layer.Data.Columns[ef]
+		levels := Levels(layer.Data, ef)
+		for i, level := range levels.Elements() {
+			df := Filter(layer.Data, ef, level)
+			delete(df.Columns, ef)
+			res := layer.Stat.Apply(df, plot)
+			res.Columns[ef] = f.Const(level, res.N)
+			if i == 0 {
+				layer.Data = res
+			} else {
+				layer.Data.Append(res)
+			}
+		}
+
+	}
+
+	return
 }
 
 // Unfacetted plotting, Layers have no own data.
 func (p *Plot) Simple() {
-	// Prepare data: Add grouping, map aestetics, clean data frame and
-	// apply scale transformations
-	for i := range p.Layers {
-		p.Layers[i].PrepareData(p)
+	// Prepare data: map aestetics, add scales, clean data frame and
+	// apply scale transformations. Mapped scales are pre-trained
+	for _, layer := range p.Layers {
+		layer.PrepareData(p)
 	}
 
 	// The second step: Compute statistics.
 	// If a layer has a statistical transform: Apply this transformation
 	// to the data frame of this layer.
 	//
-	for i, layer := range p.Layers {
-		if layer.Stat != nil {
-			data := layer.Data
-			p.Layers[i].Data = layer.Stat.Apply(data, p.Aes)
-		}
+	for _, layer := range p.Layers {
+		layer.ComputeStatistics(p)
 	}
 
 	// Construct geoms
@@ -193,7 +303,7 @@ func (p *Plot) CreatePanels() {
 		if f := p.Data.Columns[p.Faceting.Columns]; !f.Discrete() {
 			panic(fmt.Sprintf("Cannot facet over %s (type %s)", p.Faceting.Columns, f.Type.String()))
 		}
-		cunq = Levels(p.Data, p.Faceting.Columns)
+		cunq = Levels(p.Data, p.Faceting.Columns).Elements()
 		cols = len(cunq)
 	}
 
@@ -201,7 +311,7 @@ func (p *Plot) CreatePanels() {
 		if f := p.Data.Columns[p.Faceting.Rows]; !f.Discrete() {
 			panic(fmt.Sprintf("Cannot facet over %s (type %s)", p.Faceting.Columns, f.Type.String()))
 		}
-		runq = Levels(p.Data, p.Faceting.Rows)
+		runq = Levels(p.Data, p.Faceting.Rows).Elements()
 		rows = len(runq)
 	}
 
@@ -391,17 +501,18 @@ func (m AesMapping) Combine(ams ...AesMapping) AesMapping {
 //
 type Layer struct {
 	Plot *Plot
+	Name string
 
 	// A nil Data will use the Data from the plot this Layer belongs to.
-	Data *DataFrame
-	Datamapping AesMapping
+	Data        *DataFrame
+	DataMapping AesMapping
 
 	// Stat is the statistical transformation used in this layer.
-	Stat Stat
+	Stat        Stat
 	StatMapping AesMapping
 
 	// Geom is the geom to use for this layer
-	Geom Geom
+	Geom        Geom
 	GeomMapping AesMapping
 
 	// Aes is the aestetics mapping for this layer. Not every mapping is
@@ -666,48 +777,3 @@ const (
 	PosFill
 	PosDodge
 )
-
-/********************************************
-
-// First example: boxplots
-plot := Plot{
-	Data: myData,
-	Faceting: Faceting{
-		Columns: "Gender",
-		Rows: "Smoking",
-		Totals: true,
-	},
-	Aes: "x=Continent, y=Weight, color=Age",
-}
-
-layer := Layer{
-	Data: nil,
-	Stat: stat.BoxPlot{},
-	Geom: geom.BoxPlot{},
-	Aes: "x=X, ymin=Ymin, lower=lower, middle=Middle, upper=Upper, ymax=Ymax",
-}
-// produces something like
-var smokingMales MyData = filter(plot.Data, "Gender=Male", "Smoking=true")
-var smokingMalesBox stat.BoxPlotData = layer.Stat.Apply(smokingMales, plot.Aes)
-// train scales
-layer.Geom.Render(smokingMalesBox, layer.Aes)
-
-
-// Second example: Histograms
-plot2 := Plot{
-	Data: diamonds,
-	Aes: "x=Carat, y=Price, color=Cut",
-}
-
-layer2 := Layer{
-	Data: nil,
-	Stat: stat.Bin{},
-	Geom: geom.Bar{},
-	Aes: "x=X, y=Count",
-}
-// produces something like
-var binnedData stat.BinnedData = layer2.Stat.Apply(plot.Data, plot.Aes)
-// train scales
-layer2.Geom.Render(binnedData, layer.Aes)
-
-*******************************************************************/

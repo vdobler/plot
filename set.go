@@ -89,6 +89,14 @@ func NewStringSet() StringSet {
 	return make(StringSet)
 }
 
+func NewStringSetFrom(init []string) StringSet {
+	s := NewStringSet()
+	for _, v := range init {
+		s.Add(v)
+	}
+	return s
+}
+
 // Add adds x to s.
 func (s StringSet) Add(x string) {
 	s[x] = struct{}{}

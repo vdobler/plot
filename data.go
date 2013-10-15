@@ -19,6 +19,23 @@ type DataFrame struct {
 	Columns map[string]Field
 }
 
+func (df *DataFrame) Append(a *DataFrame) {
+	names := df.FieldNames()
+	dfn := NewStringSetFrom(names)
+	dfn.Remove(NewStringSetFrom(a.FieldNames()))
+	if len(dfn) != 0 {
+		panic("Bad append.")
+	}
+
+	df.N += a.N
+	// TODO: handling of string objects?
+	for _, n := range names {
+		field := df.Columns[n]
+		field.Data = append(field.Data, a.Columns[n].Data...)
+		df.Columns[n] = field
+	}
+}
+
 type Field struct {
 	Type   FieldType
 	Str    []string // contains the string values
@@ -46,6 +63,32 @@ func (f Field) Copy() Field {
 	copy(c.Str, f.Str)
 	copy(c.Data, f.Data)
 	return c
+}
+
+// Const return a copy of f with length n and a constant value of.
+// TODO: Ugly.
+func (f Field) Const(x float64, n int) Field {
+	c := Field{
+		Type:   f.Type,
+		Origin: f.Origin,
+		Str:    make([]string, len(f.Str)),
+		Data:   make([]float64, n),
+	}
+	copy(c.Str, f.Str)
+	for i := range c.Data {
+		c.Data[i] = x
+	}
+	return c
+}
+
+func (f Field) Apply(t func(float64) float64) {
+	if f.Type == String {
+		panic("Cannot apply function to String column.")
+	}
+
+	for i, v := range f.Data {
+		f.Data[i] = t(v)
+	}
 }
 
 func (df *DataFrame) FieldNames() (names []string) {
@@ -407,9 +450,9 @@ func (p IntSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func SortInts(a []int64)              { sort.Sort(IntSlice(a)) }
 
 // Levels returns the levels of field.
-func Levels(df *DataFrame, field string) []float64 {
+func Levels(df *DataFrame, field string) FloatSet {
 	if df == nil {
-		return nil
+		return NewFloatSet()
 	}
 	t, ok := df.Columns[field]
 	if !ok {
@@ -419,18 +462,17 @@ func Levels(df *DataFrame, field string) []float64 {
 		panic(fmt.Sprintf("Field %q (%s) in data frame %q is not discrete.", field, t, df.Name))
 	}
 
-	uniques := make(map[float64]struct{})
-	column := df.Columns[field].Data
-	for _, v := range column {
-		uniques[v] = struct{}{}
+	return df.Columns[field].Levels()
+}
+
+func (f Field) Levels() FloatSet {
+	if !f.Discrete() {
+		panic("Called Levels on non-discrete Field")
 	}
-	levels := make([]float64, len(uniques))
-	i := 0
-	for v, _ := range uniques {
-		levels[i] = v
-		i++
+	levels := NewFloatSet()
+	for _, v := range f.Data {
+		levels.Add(v)
 	}
-	sort.Float64s(levels)
 
 	return levels
 }
@@ -445,15 +487,18 @@ func MinMax(df *DataFrame, field string) (minval, maxval float64, minidx, maxidx
 		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
 	}
 
-	if df.N == 0 {
+	return df.Columns[field].MinMax()
+}
+
+func (f Field) MinMax() (minval, maxval float64, minidx, maxidx int) {
+	if len(f.Data) == 0 {
 		return 0, 0, -1, -1
 	}
 
-	column := df.Columns[field].Data
+	column := f.Data
 	minval, maxval = column[0], column[0]
 	minidx, maxidx = 0, 0
-	for i := 1; i < df.N; i++ {
-		v := column[i]
+	for i, v := range column {
 		if v < minval {
 			minval, minidx = v, i
 		} else if v > maxval {

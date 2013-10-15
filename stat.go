@@ -13,7 +13,9 @@ import (
 //
 // TODO: Location-/scale-invariance? f(x+a) = f(x)+a and f(x*a)=f(x*a) ??
 type Stat interface {
-	Apply(data *DataFrame, mapping AesMapping) *DataFrame
+	Name() string // Return the name of this stat.
+
+	Apply(data *DataFrame, plot *Plot) *DataFrame
 
 	// NeededAes are the aestetics which must be present in the
 	// data frame. If not all needed aestetics are mapped this
@@ -24,7 +26,17 @@ type Stat interface {
 	// statistics if present, but it is no error if they are
 	// not mapped.
 	OptionalAes() []string
+
+	ExtraFieldHandling() ExtraFieldHandling
 }
+
+type ExtraFieldHandling int
+
+const (
+	IgnoreExtraFields ExtraFieldHandling = iota
+	FailOnExtraFields
+	GroupOnExtraFields
+)
 
 type StatBin struct {
 	BinWidth float64
@@ -32,7 +44,8 @@ type StatBin struct {
 	Origin   *float64 // TODO: both optional fields as *float64?
 }
 
-func (StatBin) NeededAes() []string { return []string{"x"} }
+func (StatBin) Name() string          { return "StatBin" }
+func (StatBin) NeededAes() []string   { return []string{"x"} }
 func (StatBin) OptionalAes() []string { return []string{"weight"} }
 
 func (s StatBin) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
@@ -127,8 +140,9 @@ type StatLinReq struct {
 	A, B float64
 }
 
-func (StatLinReq) NeededAes() []string { return []string{"x", "y"}}
-func (StatBin) OptionalAes() []string { return []string{"weight"} }
+func (StatLinReq) Name() string          { return "StatLinReq" }
+func (StatLinReq) NeededAes() []string   { return []string{"x", "y"} }
+func (StatLinReq) OptionalAes() []string { return []string{"weight"} }
 
 func (s *StatLinReq) Apply(data *DataFrame, mapping AesMapping) *DataFrame {
 	if data == nil {

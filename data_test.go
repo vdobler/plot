@@ -137,12 +137,12 @@ func TestFilter(t *testing.T) {
 
 func TestLevels(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
-	ageLevels := Levels(df, "Age")
+	ageLevels := Levels(df, "Age").Elements()
 	if len(ageLevels) != 10 || ageLevels[0] != 20 || ageLevels[9] != 47 {
 		t.Errorf("Got %v", ageLevels)
 	}
 
-	origLevels := Levels(df, "Origin")
+	origLevels := Levels(df, "Origin").Elements()
 	if len(origLevels) != 3 || origLevels[0] != 0 || origLevels[1] != 1 || origLevels[2] != 2 {
 		t.Errorf("Got %#v want [0 1 2]", origLevels)
 	}
