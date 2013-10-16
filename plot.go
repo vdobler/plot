@@ -197,6 +197,18 @@ func contains(s []string, t string) bool {
 	return false
 }
 
+func same(s []string, t []string) bool {
+	if len(s) != len(t) {
+		return false
+	}
+	for _, x := range s {
+		if !contains(t, x) {
+			return false
+		}
+	}
+	return true
+}
+
 // PrepareData is the first step in generating a plot.
 // After preparing the data frame the following holds
 //   - Layer has a own data frame (maybe a copy of plots data frame)
@@ -652,30 +664,6 @@ type Viewport struct {
 	// The rectangel of this vp
 
 	// Functions to turn grob coordinates to pixel
-}
-
-type Grob interface {
-	Draw(vp Viewport)
-}
-
-type GrobLine struct {
-	x0, y0, x1, y1 float64
-	width          float64
-	style          LineType
-	color          color.Color
-}
-
-func (line GrobLine) Draw(vp Viewport) {
-}
-
-type GrobPoint struct {
-	x, y  float64
-	size  float64
-	shape PointShape
-	color color.Color
-}
-
-func (point GrobPoint) Draw(vp Viewport) {
 }
 
 // -------------------------------------------------------------------------

@@ -3,6 +3,7 @@ package plot
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -147,7 +148,7 @@ func String2LineType(s string) LineType {
 // -------------------------------------------------------------------------
 // Colors
 
-var BuiltinColors = map[string]color.RGBA{
+var BuiltinColors = map[string]color.NRGBA{
 	"red":     color.NRGBA{0xff, 0x00, 0x00, 0xff},
 	"green":   color.NRGBA{0x00, 0xff, 0x00, 0xff},
 	"blue":    color.NRGBA{0x00, 0x00, 0xff, 0xff},
@@ -180,4 +181,66 @@ func String2Color(s string) color.Color {
 	}
 
 	return color.RGBA{0xaa, 0x66, 0x77, 0x7f}
+}
+
+// -------------------------------------------------------------------------
+// Accessor functions
+
+// Return a function which maps row number in df to a color.
+// The color is produced by the appropriate scale of plot
+// or a fixed value defined in aes.
+func makeColorFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) color.Color {
+	var f func(i int) color.Color
+	if data.Has(aes) {
+		d := data.Columns[aes].Data
+		f = func(i int) color.Color {
+			return plot.Scales[aes].Color(d[i])
+		}
+	} else {
+		theColor := String2Color(style[aes])
+		f = func(int) color.Color {
+			return theColor
+		}
+	}
+	return f
+}
+
+func makePosFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) float64 {
+	var f func(i int) float64
+	if data.Has(aes) {
+		d := data.Columns[aes].Data
+		f = func(i int) float64 {
+			return plot.Scales[aes].Pos(d[i])
+		}
+	} else {
+		x := String2Float(style[aes], math.Inf(-1), math.Inf(+1))
+		f = func(int) float64 {
+			return x
+		}
+	}
+	return f
+}
+
+func makeStyleFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) int {
+	var f func(i int) int
+	if data.Has(aes) {
+		d := data.Columns[aes].Data
+		f = func(i int) int {
+			return plot.Scales[aes].Style(d[i])
+		}
+	} else {
+		var x int
+		switch aes {
+		case "shape":
+			x = int(String2PointShape(style[aes]))
+		case "linetype":
+			x = int(String2LineType(style[aes]))
+		default:
+			fmt.Printf("Oooops, this should not happen.")
+		}
+		f = func(int) int {
+			return x
+		}
+	}
+	return f
 }

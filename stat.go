@@ -187,6 +187,67 @@ func (s *StatLinReq) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	aErr, bErr := s.A*0.2, s.B*0.1 // BUG
 
 	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name))
+	result.N = 1
+
+	intercept, slope := NewField(1), NewField(1)
+	intercept.Type, slope.Type = Float, Float
+	intercept.Data[0], slope.Data[0] = s.A, s.B
+
+	interceptErr, slopeErr := NewField(1), NewField(1)
+	interceptErr.Type, slopeErr.Type = Float, Float
+	interceptErr.Data[0], slopeErr.Data[0] = aErr, bErr
+
+	result.Columns["intercept"] = intercept
+	result.Columns["slope"] = slope
+	result.Columns["interceptErr"] = interceptErr
+	result.Columns["slopeErr"] = slopeErr
+	return result
+}
+
+// -------------------------------------------------------------------------
+// Stat Smooth
+
+// Major TODO
+
+type StatSmooth struct {
+	A, B float64
+}
+
+var _ Stat = &StatSmooth{}
+
+func (StatSmooth) Name() string                           { return "StatSmooth" }
+func (StatSmooth) NeededAes() []string                    { return []string{"x", "y"} }
+func (StatSmooth) OptionalAes() []string                  { return []string{"weight"} }
+func (StatSmooth) ExtraFieldHandling() ExtraFieldHandling { return GroupOnExtraFields }
+
+func (s *StatSmooth) Apply(data *DataFrame, plot *Plot) *DataFrame {
+	if data == nil {
+		return nil
+	}
+	xc, yc := data.Columns["x"].Data, data.Columns["y"].Data
+
+	xm, ym := float64(0), float64(0)
+	for i := 0; i < data.N; i++ {
+		xm += xc[i]
+		ym += yc[i]
+	}
+	xm /= float64(data.N)
+	ym /= float64(data.N)
+
+	sy, sx := float64(0), float64(0)
+	for i := 0; i < data.N; i++ {
+		x := xc[i]
+		y := xc[i]
+		dx := x - xm
+		sx += dx * dx
+		sy += dx * (y - ym)
+	}
+
+	s.B = sy / sx
+	s.A = ym - s.B*xm
+	aErr, bErr := s.A*0.2, s.B*0.1 // BUG
+
+	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name))
 	result.N = 100 // TODO
 	xf := NewField(result.N)
 	yf := NewField(result.N)

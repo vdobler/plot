@@ -1,10 +1,5 @@
 package plot
 
-import (
-	"fmt"
-	"image/color"
-)
-
 // Geom is a geometrical object, a type of visual for the plot.
 //
 // Setting aesthetics of a geom is a major TODO!
@@ -38,7 +33,7 @@ var _ Geom = GeomPoint{}
 
 func (p GeomPoint) Name() string            { return "GeomPoint" }
 func (p GeomPoint) NeededSlots() []string   { return []string{"x", "y"} }
-func (p GeomPoint) OptionalSlots() []string { return []string{"color", "size", "type", "alpha"} }
+func (p GeomPoint) OptionalSlots() []string { return []string{"color", "size", "shape", "alpha"} }
 
 func (p GeomPoint) Aes(plot *Plot) AesMapping {
 	return p.Style.Merge(plot.Theme.PointAes, DefaultTheme.PointAes)
@@ -51,65 +46,6 @@ func (p GeomPoint) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
 func (p GeomPoint) Reparametrize(df *DataFrame) Geom {
 	// No reparamization in fundamental geom.
 	return p
-}
-
-// Return a function which maps row number in df to a color.
-// The color is produced by the appropriate scale of plot
-// or a fixed value defined in aes.
-func makeColorFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) color.Color {
-	var f func(i int) color.Color
-	if data.Has(aes) {
-		d := data.Columns[aes].Data
-		f = func(i int) color.Color {
-			return plot.Scales[aes].Color(d[i])
-		}
-	} else {
-		theColor := String2Color(style[aes])
-		f = func(int) color.Color {
-			return theColor
-		}
-	}
-	return f
-}
-
-func makePosFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) float64 {
-	var f func(i int) float64
-	if data.Has(aes) {
-		d := data.Columns[aes].Data
-		f = func(i int) float64 {
-			return plot.Scales[aes].Pos(d[i])
-		}
-	} else {
-		x := String2Float(style[aes], 0, 1)
-		f = func(int) float64 {
-			return x
-		}
-	}
-	return f
-}
-
-func makeStyleFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) int {
-	var f func(i int) int
-	if data.Has(aes) {
-		d := data.Columns[aes].Data
-		f = func(i int) int {
-			return plot.Scales[aes].Style(d[i])
-		}
-	} else {
-		var x int
-		switch aes {
-		case "shape":
-			x = int(String2PointShape(style[aes]))
-		case "linetype":
-			x = int(String2LineType(style[aes]))
-		default:
-			fmt.Printf("Oooops, this should not happen.")
-		}
-		f = func(int) int {
-			return x
-		}
-	}
-	return f
 }
 
 func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -142,5 +78,133 @@ func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob 
 
 // -------------------------------------------------------------------------
 // Geom Bar
+
 type GeomBar struct {
+	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+}
+
+// -------------------------------------------------------------------------
+// Geom Line
+type GeomLine struct {
+	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+}
+
+var _ Geom = GeomLine{}
+
+func (p GeomLine) Name() string            { return "GeomLine" }
+func (p GeomLine) NeededSlots() []string   { return []string{"x", "y"} }
+func (p GeomLine) OptionalSlots() []string { return []string{"color", "size", "linetype", "alpha"} }
+
+func (p GeomLine) Aes(plot *Plot) AesMapping {
+	return p.Style.Merge(plot.Theme.PointAes, DefaultTheme.PointAes)
+}
+
+func (p GeomLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
+	// TODO
+}
+
+func (p GeomLine) Reparametrize(df *DataFrame) Geom {
+	// No reparamization in fundamental geom.
+	return p
+}
+
+func (p GeomLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+	x, y := data.Columns["x"], data.Columns["y"]
+	grobs := make([]Grob, 0)
+	colFunc := makeColorFunc("color", data, plot, style)
+	sizeFunc := makePosFunc("size", data, plot, style)
+	alphaFunc := makePosFunc("alpha", data, plot, style)
+	typeFunc := makePosFunc("linetype", data, plot, style)
+
+	// TODO: Grouping
+
+	if data.Has("color") || data.Has("size") || data.Has("alpha") || data.Has("linetype") {
+		// Some of the optional aesthetics are mapped (not set).
+		// Cannot represent safely as a GrobPath; thus use lots
+		// of GrobLine.
+		// TODO: instead "of by one" why not use average?
+		for i := 0; i < data.N-1; i++ {
+			line := GrobLine{
+				x0:       x.Data[i],
+				y0:       y.Data[i],
+				x1:       x.Data[i+1],
+				y1:       y.Data[i+1],
+				color:    SetAlpha(colFunc(i), alphaFunc(i)),
+				size:     sizeFunc(i),
+				linetype: LineType(typeFunc(i)),
+			}
+			grobs = append(grobs, line)
+		}
+	} else {
+		// All segemtns have same color, linetype and size, use a GrobPath
+		points := make([]struct{ x, y float64 }, data.N)
+		for i := 0; i < data.N; i++ {
+			points[i].x = x.Data[i]
+			points[i].y = y.Data[i]
+		}
+		path := GrobPath{
+			points:   points,
+			color:    SetAlpha(colFunc(0), alphaFunc(0)),
+			size:     sizeFunc(0),
+			linetype: LineType(typeFunc(0)),
+		}
+		grobs = append(grobs, path)
+	}
+
+	return grobs
+}
+
+// -------------------------------------------------------------------------
+// Geom ABLine
+type GeomABLine struct {
+	Intercept, Slope float64
+	Style            AesMapping // The individal fixed, aka non-mapped aesthetics
+}
+
+var _ Geom = GeomABLine{}
+
+func (p GeomABLine) Name() string            { return "GeomABLine" }
+func (p GeomABLine) NeededSlots() []string   { return []string{"intercept", "slope"} }
+func (p GeomABLine) OptionalSlots() []string { return []string{"color", "size", "linetype", "alpha"} }
+
+func (p GeomABLine) Aes(plot *Plot) AesMapping {
+	return p.Style.Merge(plot.Theme.PointAes, DefaultTheme.PointAes)
+}
+
+func (p GeomABLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
+	// TODO
+}
+
+func (p GeomABLine) Reparametrize(df *DataFrame) Geom {
+	// No reparamization in fundamental geom.
+	return p
+}
+
+func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+	ic, sc := data.Columns["intercept"].Data, data.Columns["slope"].Data
+	grobs := make([]Grob, data.N)
+	colFunc := makeColorFunc("color", data, plot, style)
+	sizeFunc := makePosFunc("size", data, plot, style)
+	alphaFunc := makePosFunc("alpha", data, plot, style)
+	typeFunc := makePosFunc("linetype", data, plot, style)
+
+	scaleX, scaleY := plot.Scales["x"], plot.Scales["y"]
+	xmin, xmax := scaleX.DomainMin, scaleX.DomainMax
+	sxmin, sxmax := scaleX.Pos(xmin), scaleX.Pos(xmax)
+
+	for i := 0; i < data.N; i++ {
+		intercept, slope := ic[i], sc[i]
+		line := GrobLine{
+			x0:       sxmin,
+			y0:       scaleY.Pos(xmin*slope + intercept),
+			x1:       sxmax,
+			y1:       scaleY.Pos(xmax*slope + intercept),
+			color:    SetAlpha(colFunc(i), alphaFunc(i)),
+			size:     sizeFunc(i),
+			linetype: LineType(typeFunc(i)),
+		}
+		grobs = append(grobs, line)
+	}
+
+	return grobs
 }
