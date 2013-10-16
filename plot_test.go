@@ -61,7 +61,7 @@ func TestString2Color(t *testing.T) {
 	}
 }
 
-func TestVerySimplePlot(t *testing.T) {
+func TestIndividualSteps(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
 	plot := &Plot{
 		Data: df,
@@ -109,5 +109,44 @@ func TestVerySimplePlot(t *testing.T) {
 	if fields := plot.Layers[1].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 1 DF has fields %v", fields)
 	}
+	if sx, ok := plot.Scales["x"]; !ok {
+		t.Errorf("Missing x scale")
+	} else {
+		if sx.Discrete || sx.Transform != nil || sx.Type != "x" {
+			t.Errorf("Scale x = %+v", sx)
+		}
+	}
+	if sy, ok := plot.Scales["y"]; !ok {
+		t.Errorf("Missing y scale")
+	} else {
+		if sy.Discrete || sy.Transform != nil || sy.Type != "y" {
+			t.Errorf("Scale y = %+v", sy)
+		}
+	}
+
+	// Test ComputeStatistics
+	// No statistic on layer 0: data field is unchanges
+	plot.Layers[0].ComputeStatistics()
+	if fields := plot.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
+		t.Errorf("Layer 0 DF has fields %v", fields)
+	}
+
+	// StatLinReq produces intercept and slope
+	plot.Layers[1].ComputeStatistics()
+	if fields := plot.Layers[1].Data.FieldNames(); !same(fields, []string{"intercept", "slope", "interceptErr", "slopeErr"}) {
+		t.Errorf("Layer 1 DF has fields %v", fields)
+	}
+	data := plot.Layers[1].Data
+	if data.N != 1 {
+		t.Errorf("Got %d data in lin req df.", plot.Layers[1].Data.N)
+	}
+	t.Logf("Intercept = %.2f   Slope = %.2f",
+		data.Columns["intercept"].Data[0],
+		data.Columns["slope"].Data[0])
+
+	// Test Construct ConstructGeoms. This shouldn't change much as
+	// GeomABLine doesn't reparametrize and we don't do position adjustments.
+	plot.Layers[0].ConstructGeoms()
+	plot.Layers[1].ConstructGeoms()
 
 }

@@ -61,38 +61,23 @@ const (
 	StarPoint
 )
 
+var shapeNames = []string{"blank", "circle", "square", "diamond", "delta", "nabla",
+	"solidcircle", "solidsquare", "soliddiamond", "soliddelta", "solidnabla",
+	"cross", "plus", "star"}
+
+func (s PointShape) String() string {
+	return shapeNames[s]
+}
+
 func String2PointShape(s string) PointShape {
 	n, err := strconv.Atoi(s)
 	if err == nil {
 		return PointShape(n % (int(StarPoint) + 1))
 	}
-	switch s {
-	case "circle":
-		return CirclePoint
-	case "square":
-		return SquarePoint
-	case "diamond":
-		return DiamondPoint
-	case "delta":
-		return DeltaPoint
-	case "nabla":
-		return NablaPoint
-	case "solid-circle":
-		return SolidCirclePoint
-	case "solid-square":
-		return SolidSquarePoint
-	case "solid-diamond":
-		return SolidDiamondPoint
-	case "solid-delta":
-		return SolidDeltaPoint
-	case "solid-nabla":
-		return SolidNablaPoint
-	case "cross":
-		return CrossPoint
-	case "plus":
-		return PlusPoint
-	case "star":
-		return StarPoint
+	for i, n := range shapeNames {
+		if n == s {
+			return PointShape(i)
+		}
 	}
 	return BlankPoint
 }
@@ -120,29 +105,24 @@ const (
 	TwodashLine
 )
 
+var linetypeNames = []string{"blank", "solid", "dashed", "dotted", "dotdash",
+	"longdash", "twodash"}
+
+func (lt LineType) String() string {
+	return linetypeNames[lt]
+}
+
 func String2LineType(s string) LineType {
 	n, err := strconv.Atoi(s)
 	if err == nil {
 		return LineType(n % (int(TwodashLine) + 1))
 	}
-	switch s {
-	case "blank":
-		return BlankLine
-	case "solid":
-		return SolidLine
-	case "dashed":
-		return DashedLine
-	case "dotted":
-		return DottedLine
-	case "dotdash":
-		return DotDashLine
-	case "longdash":
-		return LongdashLine
-	case "twodash":
-		return TwodashLine
-	default:
-		return BlankLine
+	for i, n := range linetypeNames {
+		if n == s {
+			return LineType(i)
+		}
 	}
+	return BlankLine
 }
 
 // -------------------------------------------------------------------------
@@ -174,13 +154,25 @@ func String2Color(s string) color.Color {
 		if len(s) >= 9 {
 			fmt.Sscanf(s[7:9], "%2x", &a)
 		}
-		return color.RGBA{r, g, b, a}
+		return color.NRGBA{r, g, b, a}
 	}
 	if col, ok := BuiltinColors[s]; ok {
 		return col
 	}
 
-	return color.RGBA{0xaa, 0x66, 0x77, 0x7f}
+	return color.NRGBA{0xaa, 0x66, 0x77, 0x7f}
+}
+
+func Color2String(c color.Color) string {
+	r, g, b, a := c.RGBA()
+	r >>= 8
+	g >>= 8
+	b >>= 8
+	s := fmt.Sprintf("#%02x%02x%02x", r, g, b)
+	if a != 0xffff {
+		s += fmt.Sprintf("%02x", a>>8)
+	}
+	return s
 }
 
 // -------------------------------------------------------------------------
