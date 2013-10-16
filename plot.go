@@ -141,6 +141,9 @@ func (s *Scale) PrepareContinous() {
 	min, max := s.DomainMin-expand, s.DomainMax+expand
 	fullRange = max - min
 
+	fmt.Printf("Scale %s, cont. domain=[%.3f,%.3f] expanded=[%.3f,%.3f]\n",
+		s.Type, s.DomainMin, s.DomainMax, min, max)
+
 	// Set up breaks and labels
 	nb := 6
 	s.Breaks = make([]float64, nb+1)
@@ -148,6 +151,7 @@ func (s *Scale) PrepareContinous() {
 	for i := range s.Breaks {
 		x := s.DomainMin + float64(i)*fullRange/float64(nb)
 		s.Breaks[i] = x
+		fmt.Printf("  break %d = %.3f\n", i, x)
 	}
 	// TODO: ugly should be initialised to identitiy transform
 	var format func(float64, string) string
@@ -160,6 +164,7 @@ func (s *Scale) PrepareContinous() {
 	}
 	for i, x := range s.Breaks {
 		s.Levels[i] = format(x, "")
+		fmt.Printf("  level %d = %s\n", i, s.Levels[i])
 	}
 
 	// Produce mapping functions
@@ -219,31 +224,33 @@ func same(s []string, t []string) bool {
 //     ScaleTransform associated with x, y, size, ....
 //
 // TODO: how about grouping? 69b0d2b contains grouping code.
-func (layer *Layer) PrepareData() {
-	// Set up data and aestetics mapping.
-	if layer.Data == nil {
-		layer.Data = layer.Plot.Data.Copy()
-	}
-	aes := layer.DataMapping
-	if len(aes) == 0 {
-		aes = layer.Plot.Aes
-	}
-
-	// Drop all unused (unmapped) fields in the data frame.
-	_, fields := aes.Used(false)
-	for _, f := range layer.Data.FieldNames() {
-		if contains(fields, f) {
-			continue
+func (p *Plot) PrepareData() {
+	for _, layer := range p.Layers {
+		// Set up data and aestetics mapping.
+		if layer.Data == nil {
+			layer.Data = layer.Plot.Data.Copy()
 		}
-		delete(layer.Data.Columns, f)
-	}
+		aes := layer.DataMapping
+		if len(aes) == 0 {
+			aes = layer.Plot.Aes
+		}
 
-	// Rename mapped fields to their aestethic name
-	for a, f := range aes {
-		layer.Data.Rename(f, a)
-	}
+		// Drop all unused (unmapped) fields in the data frame.
+		_, fields := aes.Used(false)
+		for _, f := range layer.Data.FieldNames() {
+			if contains(fields, f) {
+				continue
+			}
+			delete(layer.Data.Columns, f)
+		}
 
-	layer.Plot.PrepareScales(layer.Data, aes)
+		// Rename mapped fields to their aestethic name
+		for a, f := range aes {
+			layer.Data.Rename(f, a)
+		}
+
+		layer.Plot.PrepareScales(layer.Data, aes)
+	}
 }
 
 // PrepareScales makes sure plot contains all sclaes needed for the
@@ -347,9 +354,14 @@ func (layer *Layer) ComputeStatistics() {
 	if len(layer.StatMapping) == 0 {
 		return
 	}
-	layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
 
-	return
+	layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
+}
+
+func (p *Plot) ComputeStatistics() {
+	for _, layer := range p.Layers {
+		layer.ComputeStatistics()
+	}
 }
 
 // ConstructGeoms sets up the geoms so that they can be rendered. This includes
@@ -358,83 +370,88 @@ func (layer *Layer) ComputeStatistics() {
 // fundamental geoms.
 //
 // TODO: Should 5a and 5b be exchanged?
-func (layer *Layer) ConstructGeoms() {
-	if layer.Geom == nil {
-		layer.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
-		return
+func (p *Plot) ConstructGeoms() {
+	for _, layer := range p.Layers {
+		if layer.Geom == nil {
+			layer.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
+			return
+		}
+
+		// Rename fields produces by statistical transform to names
+		// the geom understands. (Step 4b.)
+		// TODO: When to set e.g. color to a certain value?
+		for aes, field := range layer.GeomMapping {
+			layer.Data.Rename(field, aes)
+		}
+
+		// Make sure all needed slots are present in the data frame
+		slots := NewStringSetFrom(layer.Geom.NeededSlots())
+		dfSlots := NewStringSetFrom(layer.Data.FieldNames())
+		slots.Remove(dfSlots)
+		if len(slots) > 0 {
+			layer.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
+				layer.Geom.Name(), layer.Name, slots.Elements())
+			layer.Geom = nil
+			return
+		}
+
+		// (Step 5a)
+		layer.Geom.AdjustPosition(layer.Data, layer.Position)
+
+		// (Step 5b)
+		layer.RepGeom = layer.Geom.Reparametrize(layer.Data)
 	}
-
-	// Rename fields produces by statistical transform to names
-	// the geom understands. (Step 4b.)
-	// TODO: When to set e.g. color to a certain value?
-	for aes, field := range layer.GeomMapping {
-		layer.Data.Rename(field, aes)
-	}
-
-	// Make sure all needed slots are present in the data frame
-	slots := NewStringSetFrom(layer.Geom.NeededSlots())
-	dfSlots := NewStringSetFrom(layer.Data.FieldNames())
-	slots.Remove(dfSlots)
-	if len(slots) > 0 {
-		layer.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
-			layer.Geom.Name(), layer.Name, slots.Elements())
-		layer.Geom = nil
-		return
-	}
-
-	// (Step 5a)
-	layer.Geom.AdjustPosition(layer.Data, layer.Position)
-
-	// (Step 5b)
-	layer.RepGeom = layer.Geom.Reparametrize(layer.Data)
 }
 
-// Unfacetted plotting, Layers have no own data.
-func (plot *Plot) Simple() {
-	// Make sure all layers know their parent plot / and or panel (TODO)
-	for i := range plot.Layers {
-		plot.Layers[i].Plot = plot
-	}
-
-	// Prepare data: map aestetics, add scales, clean data frame and
-	// apply scale transformations. Mapped scales are pre-trained.
-	// (Steps 2a and 2b in design.)
-	for _, layer := range plot.Layers {
-		layer.PrepareData()
-	}
-
-	// The second step: Compute statistics.
-	// If a layer has a statistical transform: Apply this transformation
-	// to the data frame of this layer.
-	// (Step 3 and 4a in design)
-	for _, layer := range plot.Layers {
-		layer.ComputeStatistics()
-	}
-
-	// Construct geoms
-	// (Step 4b, 5a and 5b in design)
-	for _, layer := range plot.Layers {
-		layer.ConstructGeoms()
-	}
-
-	// Retrain scales. (Step 6)
-	for aes, scale := range plot.Scales {
-		for _, layer := range plot.Layers {
+func (p *Plot) RetrainScales() {
+	for aes, scale := range p.Scales {
+		for _, layer := range p.Layers {
 			if col, ok := layer.Data.Columns[aes]; ok {
 				scale.Train(col)
 			}
 		}
 		scale.Prepare()
 	}
+}
 
-	// Render Geoms to Grobs using scales (Step7).
-	for _, layer := range plot.Layers {
+func (p *Plot) RenderGeoms() {
+	for _, layer := range p.Layers {
 		if layer.RepGeom != nil {
 			data := layer.Data
-			aes := layer.Geom.Aes(plot)
-			layer.Grobs = layer.RepGeom.Render(plot, data, aes)
+			aes := layer.Geom.Aes(p)
+			layer.Grobs = layer.RepGeom.Render(p, data, aes)
 		}
 	}
+}
+
+// Unfacetted plotting, Layers have no own data.
+// TODO: maybe not func on Plot but on Panel
+func (p *Plot) Simple() {
+	// Make sure all layers know their parent plot / and or panel (TODO)
+	for i := range p.Layers {
+		p.Layers[i].Plot = p
+	}
+
+	// Prepare data: map aestetics, add scales, clean data frame and
+	// apply scale transformations. Mapped scales are pre-trained.
+	// (Steps 2a and 2b in design.)
+	p.PrepareData()
+
+	// The second step: Compute statistics.
+	// If a layer has a statistical transform: Apply this transformation
+	// to the data frame of this layer.
+	// (Step 3 and 4a in design)
+	p.ComputeStatistics()
+
+	// Construct geoms
+	// (Step 4b, 5a and 5b in design)
+	p.ConstructGeoms()
+
+	// Retrain scales. (Step 6)
+	p.RetrainScales()
+
+	// Render Geoms to Grobs using scales (Step7).
+	p.RenderGeoms()
 }
 
 func (p *Plot) Draw() {
@@ -557,22 +574,6 @@ type Panel struct {
 	Plot *Plot
 
 	Layers []*Layer
-}
-
-type Theme struct {
-	BoxAes, PointAes, BarAes, LineAes AesMapping
-}
-
-var DefaultTheme = Theme{
-	BoxAes: AesMapping{
-		"fill": "fixed: #cccccc",
-		"line": "fixed: 0",
-	},
-	PointAes: AesMapping{
-		"size":  "fixed: 5pt",
-		"shape": "fixed: 1",
-		"color": "fixed: #222222",
-	},
 }
 
 type Faceting struct {

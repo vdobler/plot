@@ -1,5 +1,9 @@
 package plot
 
+import "fmt"
+
+var _ = fmt.Printf
+
 // Geom is a geometrical object, a type of visual for the plot.
 //
 // Setting aesthetics of a geom is a major TODO!
@@ -36,7 +40,7 @@ func (p GeomPoint) NeededSlots() []string   { return []string{"x", "y"} }
 func (p GeomPoint) OptionalSlots() []string { return []string{"color", "size", "shape", "alpha"} }
 
 func (p GeomPoint) Aes(plot *Plot) AesMapping {
-	return p.Style.Merge(plot.Theme.PointAes, DefaultTheme.PointAes)
+	return MergeStyles(p.Style, plot.Theme.PointStyle, DefaultTheme.PointStyle)
 }
 
 func (p GeomPoint) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
@@ -51,6 +55,7 @@ func (p GeomPoint) Reparametrize(df *DataFrame) Geom {
 func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
 	points := make([]GrobPoint, data.N)
 	x, y := data.Columns["x"], data.Columns["y"]
+	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
 
 	colFunc := makeColorFunc("color", data, plot, style)
 	// TODO: allow fill also
@@ -60,8 +65,8 @@ func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob 
 	shapeFunc := makePosFunc("shape", data, plot, style)
 
 	for i := 0; i < data.N; i++ {
-		points[i].x = x.Data[i]
-		points[i].y = y.Data[i]
+		points[i].x = xf(x.Data[i])
+		points[i].y = yf(y.Data[i])
 		color := colFunc(i)
 		alpha := alphaFunc(i)
 		points[i].color = SetAlpha(color, alpha)
@@ -96,7 +101,7 @@ func (p GeomLine) NeededSlots() []string   { return []string{"x", "y"} }
 func (p GeomLine) OptionalSlots() []string { return []string{"color", "size", "linetype", "alpha"} }
 
 func (p GeomLine) Aes(plot *Plot) AesMapping {
-	return p.Style.Merge(plot.Theme.PointAes, DefaultTheme.PointAes)
+	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
 }
 
 func (p GeomLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
@@ -168,7 +173,7 @@ func (p GeomABLine) NeededSlots() []string   { return []string{"intercept", "slo
 func (p GeomABLine) OptionalSlots() []string { return []string{"color", "size", "linetype", "alpha"} }
 
 func (p GeomABLine) Aes(plot *Plot) AesMapping {
-	return p.Style.Merge(plot.Theme.PointAes, DefaultTheme.PointAes)
+	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
 }
 
 func (p GeomABLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
@@ -186,7 +191,7 @@ func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob
 	colFunc := makeColorFunc("color", data, plot, style)
 	sizeFunc := makePosFunc("size", data, plot, style)
 	alphaFunc := makePosFunc("alpha", data, plot, style)
-	typeFunc := makePosFunc("linetype", data, plot, style)
+	typeFunc := makeStyleFunc("linetype", data, plot, style)
 
 	scaleX, scaleY := plot.Scales["x"], plot.Scales["y"]
 	xmin, xmax := scaleX.DomainMin, scaleX.DomainMax
@@ -203,7 +208,7 @@ func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob
 			size:     sizeFunc(i),
 			linetype: LineType(typeFunc(i)),
 		}
-		grobs = append(grobs, line)
+		grobs[i] = line
 	}
 
 	return grobs

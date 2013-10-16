@@ -16,7 +16,7 @@ func String2Float(s string, low, high float64) float64 {
 	}
 	value, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		fmt.Printf("Cannot parse style %q as float: %s", s, err.Error())
+		// fmt.Printf("Cannot parse style %q as float: %s", s, err.Error())
 		return 0.5
 	}
 	value /= factor
@@ -235,4 +235,20 @@ func makeStyleFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) fu
 		}
 	}
 	return f
+}
+
+func MergeStyles(aes ...AesMapping) AesMapping {
+	result := make(AesMapping)
+	for _, a := range aes {
+		if len(a) == 0 {
+			continue
+		}
+
+		for k, v := range a {
+			if _, ok := result[k]; !ok {
+				result[k] = v
+			}
+		}
+	}
+	return result
 }

@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"fmt"
 	"image/color"
 	"os"
 	"testing"
@@ -101,11 +102,10 @@ func TestIndividualSteps(t *testing.T) {
 	}
 
 	// Test PrepareData
-	plot.Layers[0].PrepareData()
+	plot.PrepareData()
 	if fields := plot.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 0 DF has fields %v", fields)
 	}
-	plot.Layers[1].PrepareData()
 	if fields := plot.Layers[1].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 1 DF has fields %v", fields)
 	}
@@ -125,14 +125,13 @@ func TestIndividualSteps(t *testing.T) {
 	}
 
 	// Test ComputeStatistics
+	plot.ComputeStatistics()
+
 	// No statistic on layer 0: data field is unchanges
-	plot.Layers[0].ComputeStatistics()
 	if fields := plot.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 0 DF has fields %v", fields)
 	}
-
 	// StatLinReq produces intercept and slope
-	plot.Layers[1].ComputeStatistics()
 	if fields := plot.Layers[1].Data.FieldNames(); !same(fields, []string{"intercept", "slope", "interceptErr", "slopeErr"}) {
 		t.Errorf("Layer 1 DF has fields %v", fields)
 	}
@@ -146,7 +145,30 @@ func TestIndividualSteps(t *testing.T) {
 
 	// Test Construct ConstructGeoms. This shouldn't change much as
 	// GeomABLine doesn't reparametrize and we don't do position adjustments.
-	plot.Layers[0].ConstructGeoms()
-	plot.Layers[1].ConstructGeoms()
+	plot.ConstructGeoms()
+
+	plot.RetrainScales()
+	// Only x and y are set up
+	if sx, ok := plot.Scales["x"]; !ok {
+		t.Errorf("Missing x scale")
+	} else {
+		if sx.Pos == nil {
+			t.Errorf("Missing Pos for x scale.")
+		}
+		if sx.DomainMin > 1.62 || sx.DomainMax < 1.95 {
+			t.Errorf("Bad training: %f %f", sx.DomainMin, sx.DomainMax)
+		}
+	}
+
+	// Render Geoms to Grobs using scales (Step7).
+	plot.RenderGeoms()
+	fmt.Println("Layer 0, raw data")
+	for _, grob := range plot.Layers[0].Grobs {
+		fmt.Println("  ", grob.String())
+	}
+	fmt.Println("Layer 1, linear regression")
+	for _, grob := range plot.Layers[1].Grobs {
+		fmt.Println("  ", grob.String())
+	}
 
 }

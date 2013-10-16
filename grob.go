@@ -3,6 +3,7 @@ package plot
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strings"
 )
 
@@ -87,4 +88,47 @@ func (path GrobPath) String() string {
 	return fmt.Sprintf("Path(%s %s %s %.1f)",
 		points, Color2String(path.color), path.linetype.String(),
 		path.size)
+}
+
+// -------------------------------------------------------------------------
+// Grob Text
+
+type GrobText struct {
+	x, y  float64
+	text  string
+	size  float64
+	color color.Color
+	angle float64
+
+	family, fontface string
+	vjust, hjust     float64
+	lineheight       float64
+}
+
+var _ Grob = GrobText{}
+
+func (text GrobText) Draw(vp Viewport) {
+}
+
+func (text GrobText) String() string {
+	just := "r"
+	if text.vjust < 1/3 {
+		just = "l"
+	} else if text.vjust < 2/3 {
+		just = "c"
+	}
+	if text.hjust < 1/3 {
+		just += "t"
+	} else if text.hjust < 2/3 {
+		just += "m"
+	} else {
+		just += "b"
+	}
+
+	fnt := fmt.Sprintf("%s/%s/%.0f", strings.Replace(text.family, " ", "-", -1),
+		text.fontface, text.lineheight)
+
+	return fmt.Sprintf("Text(%.3f,%.3f %q %s %.0f° %s %s)",
+		text.x, text.y, text.text, Color2String(text.color),
+		180*text.angle/math.Pi, just, fnt)
 }
