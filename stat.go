@@ -38,6 +38,9 @@ const (
 	GroupOnExtraFields
 )
 
+// -------------------------------------------------------------------------
+// StatBin
+
 type StatBin struct {
 	BinWidth float64
 	Drop     bool
@@ -268,4 +271,41 @@ func (s *StatSmooth) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	}
 
 	return result
+}
+
+// -------------------------------------------------------------------------
+// StatLabel
+
+type StatLabel struct {
+	Format string
+}
+
+var _ Stat = StatLabel{}
+
+func (StatLabel) Name() string                           { return "StatLabel" }
+func (StatLabel) NeededAes() []string                    { return []string{"x", "y", "value"} }
+func (StatLabel) OptionalAes() []string                  { return []string{"color"} }
+func (StatLabel) ExtraFieldHandling() ExtraFieldHandling { return IgnoreExtraFields }
+
+func (s StatLabel) Apply(data *DataFrame, plot *Plot) *DataFrame {
+	println("==============\nStatLabel.Apply\n=============")
+	result := NewDataFrame(fmt.Sprintf("labeling %s", data.Name))
+	result.N = data.N
+	textf := NewField(result.N)
+	textf.Type = String
+
+	value := data.Columns["value"].Data
+
+	for i := 0; i < result.N; i++ {
+		// BUG: what if value is time or string?
+		t := fmt.Sprintf(s.Format, value[i])
+		textf.Data[i] = float64(textf.AddStr(t))
+	}
+
+	result.Columns["x"] = data.Columns["x"].Copy()
+	result.Columns["y"] = data.Columns["y"].Copy()
+	result.Columns["text"] = textf
+
+	return result
+
 }

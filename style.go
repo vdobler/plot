@@ -10,16 +10,20 @@ import (
 
 func String2Float(s string, low, high float64) float64 {
 	factor := 1.0
-	if strings.HasSuffix("s", "%") {
+	if strings.HasSuffix(s, "%") {
 		s = s[:len(s)-1]
-		factor = 100
+		factor = 1 / 100
+	} else if strings.HasSuffix(s, "°") {
+		s = s[:len(s)-1]
+		factor = math.Pi / 180
 	}
+
 	value, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		// fmt.Printf("Cannot parse style %q as float: %s", s, err.Error())
 		return 0.5
 	}
-	value /= factor
+	value *= factor
 
 	if value < low {
 		return low

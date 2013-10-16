@@ -59,6 +59,9 @@ type Layer struct {
 }
 
 func (p *Plot) Warnf(f string, args ...interface{}) {
+	if !strings.HasSuffix(f, "\n") {
+		f = f + "\n"
+	}
 	fmt.Printf("Warning "+f, args...)
 }
 
@@ -131,6 +134,7 @@ func (s *Scale) Prepare() {
 }
 
 func (s *Scale) PrepareDiscrete() {
+	fmt.Printf("Scale %#v\n", *s)
 	panic("Implement me")
 }
 
@@ -230,10 +234,7 @@ func (p *Plot) PrepareData() {
 		if layer.Data == nil {
 			layer.Data = layer.Plot.Data.Copy()
 		}
-		aes := layer.DataMapping
-		if len(aes) == 0 {
-			aes = layer.Plot.Aes
-		}
+		aes := MergeAes(layer.DataMapping, layer.Plot.Aes)
 
 		// Drop all unused (unmapped) fields in the data frame.
 		_, fields := aes.Used(false)
@@ -257,28 +258,40 @@ func (p *Plot) PrepareData() {
 // aesthetics in aes, the data is scale transformed if requested by the
 // scale and the scales are pre-trained.
 func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
-	// Add scale for these aesthetics if not jet set up.
-	for a := range aes {
-		if _, ok := plot.Scales[a]; !ok {
-			// Add appropriate scale.
-			plot.Scales[a] = NewScale(a, data.Columns[a])
-		}
+	scaleable := map[string]bool{
+		"x":        true,
+		"y":        true,
+		"color":    true,
+		"fill":     true,
+		"alpha":    true,
+		"size":     true,
+		"linetype": true,
+		"shape":    true,
 	}
 
-	// Transform scales if needed.
 	for a := range aes {
-		scale := plot.Scales[a]
+		if !scaleable[a] {
+			continue
+		}
+
+		scale, ok := plot.Scales[a]
+
+		// Add scale for these aesthetics if not jet set up.
+		if !ok {
+			// Add appropriate scale.
+			scale = NewScale(a, data.Columns[a])
+			plot.Scales[a] = scale
+		}
+
+		// Transform scales if needed.
 		if scale.Transform != nil {
 			field := data.Columns[a]
 			field.Apply(scale.Transform.Trans)
 		}
-	}
-
-	// Pre-train scales
-	for a := range aes {
-		scale := plot.Scales[a]
+		// Pre-train scales
 		scale.Train(data.Columns[a])
 	}
+
 }
 
 // ComputeStatistics computes the statistical transform. Might be the identity.
@@ -635,16 +648,8 @@ func (m AesMapping) Copy() AesMapping {
 }
 
 // Merge merges set values in all the ams into m and returns the merged mapping.
-func (m AesMapping) Merge(ams ...AesMapping) AesMapping {
-	merged := m.Copy()
-	for _, am := range ams {
-		for aes, fname := range am {
-			if _, ok := merged[aes]; !ok {
-				merged[aes] = fname
-			}
-		}
-	}
-	return merged
+func MergeAes(ams ...AesMapping) AesMapping {
+	return MergeStyles(ams...)
 }
 
 // Combine merges set values in all the ams into m and returns the merged mapping.

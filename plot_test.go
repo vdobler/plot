@@ -93,6 +93,21 @@ func TestIndividualSteps(t *testing.T) {
 				// StatLinReq produces intercept/slope suitable for GeomABLine
 				GeomMapping: nil,
 			},
+			&Layer{
+				Name: "Age Label",
+				DataMapping: AesMapping{
+					"value": "Age",
+				},
+				Stat: &StatLabel{Format: "%.0f years"},
+				Geom: GeomText{
+					Style: AesMapping{
+						"color":  "blue",
+						"angle":  "45°",
+						"family": "Helvetica",
+					},
+				},
+				GeomMapping: nil,
+			},
 		},
 		Scales: make(map[string]*Scale),
 	}
@@ -168,6 +183,10 @@ func TestIndividualSteps(t *testing.T) {
 	}
 	fmt.Println("Layer 1, linear regression")
 	for _, grob := range plot.Layers[1].Grobs {
+		fmt.Println("  ", grob.String())
+	}
+	fmt.Println("Layer 2, labels")
+	for _, grob := range plot.Layers[2].Grobs {
 		fmt.Println("  ", grob.String())
 	}
 

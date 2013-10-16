@@ -53,6 +53,9 @@ Plot Creation is the following process:
       scale transformation (identitiy, log, sqrt, 1/x, ...)
       Result: Data frame in Domain Units, unmapped fields have
       original field names, other have the mapped aes name.
+      Only add "known" scales to the plot: During this stage
+      we might want to keep columns in the original data frame
+      so that the statistical transform can use these columns.
   2b. Pre-Train Scales. Usefull if upcumming stat wants to knows what
       the full x-range will be.
 

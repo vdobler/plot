@@ -111,7 +111,7 @@ func (text GrobText) Draw(vp Viewport) {
 }
 
 func (text GrobText) String() string {
-	just := "r"
+	just := "r" // TODO: check if this is the proper def.
 	if text.vjust < 1/3 {
 		just = "l"
 	} else if text.vjust < 2/3 {
@@ -128,7 +128,7 @@ func (text GrobText) String() string {
 	fnt := fmt.Sprintf("%s/%s/%.0f", strings.Replace(text.family, " ", "-", -1),
 		text.fontface, text.lineheight)
 
-	return fmt.Sprintf("Text(%.3f,%.3f %q %s %.0f° %s %s)",
+	return fmt.Sprintf("Text(%.3f,%.3f %q %s %.0f° %s %q)",
 		text.x, text.y, text.text, Color2String(text.color),
 		180*text.angle/math.Pi, just, fnt)
 }

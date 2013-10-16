@@ -213,3 +213,60 @@ func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob
 
 	return grobs
 }
+
+// -------------------------------------------------------------------------
+// Geom Text
+
+type GeomText struct {
+	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+}
+
+var _ Geom = GeomText{}
+
+func (t GeomText) Name() string            { return "GeomText" }
+func (t GeomText) NeededSlots() []string   { return []string{"x", "y", "text"} }
+func (t GeomText) OptionalSlots() []string { return []string{"color", "size", "angle", "alpha"} }
+
+func (t GeomText) Aes(plot *Plot) AesMapping {
+	return MergeStyles(t.Style, plot.Theme.TextStyle, DefaultTheme.TextStyle)
+}
+
+func (t GeomText) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
+	// TODO
+}
+
+func (t GeomText) Reparametrize(df *DataFrame) Geom {
+	// No reparamization in fundamental geom.
+	return t
+}
+
+func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+	fmt.Printf("Rendering Geom %v\n", t)
+
+	x, y, s := data.Columns["x"], data.Columns["y"], data.Columns["text"]
+	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
+
+	fmt.Printf("::: GeomText Render: type of column text: %s\n", s.Type)
+
+	colFunc := makeColorFunc("color", data, plot, style)
+	sizeFunc := makePosFunc("size", data, plot, style)
+	alphaFunc := makePosFunc("alpha", data, plot, style)
+	angleFunc := makePosFunc("angle", data, plot, style)
+
+	grobs := make([]Grob, data.N)
+	for i := 0; i < data.N; i++ {
+		color := SetAlpha(colFunc(i), alphaFunc(i))
+		text := s.String(s.Data[i])
+		fmt.Printf("%d: %#v %#v\n", i, s.Data[i], text)
+		grob := GrobText{
+			x:     xf(x.Data[i]),
+			y:     yf(y.Data[i]),
+			text: text,
+			color: color,
+			size:  sizeFunc(i),
+			angle:  angleFunc(i),
+		}
+		grobs[i] = grob
+	}
+	return grobs
+}

@@ -2,6 +2,7 @@ package plot
 
 type Theme struct {
 	PointStyle, LineStyle, BarStyle AesMapping
+	TextStyle                       AesMapping
 }
 
 var DefaultTheme = Theme{
@@ -23,5 +24,14 @@ var DefaultTheme = Theme{
 		"color":    "gray20",
 		"fill":     "gray20",
 		"alpha":    "1",
+	},
+	TextStyle: AesMapping{
+		"family":     "Helvetica",
+		"fontface":   "regular",
+		"lineheight": "15",
+		"color":      "black",
+		"vjust":      "0.5",
+		"hjust":      "0.5",
+		"angle":      "0",
 	},
 }
