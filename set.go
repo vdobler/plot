@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"fmt"
 	"sort"
 )
 
@@ -12,6 +13,14 @@ type FloatSet map[float64]struct{}
 
 func NewFloatSet() FloatSet {
 	return make(FloatSet)
+}
+
+func (s FloatSet) String() string {
+	var t = "[ "
+	for x, _ := range s {
+		t += fmt.Sprintf("%.1f ", x)
+	}
+	return t + "]"
 }
 
 // Add adds x to s.

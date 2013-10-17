@@ -4,24 +4,40 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"time"
 )
 
 // Scale provides position scales like x- and y-axis as well as color
 // or other scales.
 type Scale struct {
 	Discrete    bool
-	Type        string // pos (x/y), col/fill, size, type ... TODO: good like this?
+	Time        bool
+	Aesthetic   string // pos (x/y), col/fill, size, type ... TODO: good like this?
 	ExpandToTic bool
 
+	// Range of the Domain, as [DomainMin,DomainMax] interval for
+	// continuous scales or as a set DomainLevels of values.
+	// These values are populated during the trainings.
 	DomainMin    float64
 	DomainMax    float64
 	DomainLevels FloatSet
 
+	// The Fix... fields can be used to manually set the domain
+	// of this scale to fixed values.
+	FixMin    float64
+	FixMax    float64
+	FixLevels FloatSet
+
+	// Transformation of values and guids.
 	Transform *ScaleTransform
 
-	// Also set up after training.
-	Breaks []float64 // empty: auto
-	Levels []string  // empty: auto, different length than breaks: bug
+	// All following fields are set in Prepare.
+
+	// Breaks controls the position of the tics. Empty: auto
+	Breaks []float64
+
+	// Labels are the labels for the tics. Empty: print Breaks
+	Labels []string
 
 	// Set up later after real training
 	Color func(x float64) color.Color // color, fill. Any color
@@ -29,22 +45,74 @@ type Scale struct {
 	Style func(x float64) int         // point and line type. Range ???
 }
 
+func (s *Scale) String() string {
+	f2t := func(x float64) string {
+		return time.Unix(int64(x), 0).Format("2006-01-02 15:04:05")
+	}
+
+	t := fmt.Sprintf("Scale for %q: ", s.Aesthetic)
+	if s.Discrete {
+		t += "discrete\n    Domain = "
+		t += s.FixLevels.String()
+	} else {
+		if s.Time {
+			t += "time\n    Domain = "
+			t += f2t(s.DomainMin) + " -- " + f2t(s.DomainMax)
+		} else {
+			t += "continous\n    Domain = "
+			t += fmt.Sprintf("%.2f -- %.2f", s.DomainMin, s.DomainMax)
+		}
+	}
+	t += "\n    Transform = " + s.Transform.Name
+	t += "\n    Breaks: "
+	if len(s.Breaks) == 0 {
+		t += "- empty -"
+	} else {
+		for _, b := range s.Breaks {
+			t += fmt.Sprintf("%8.1f", b)
+		}
+		t += "\n    Labels: "
+		if len(s.Labels) == 0 {
+			t += "- empty -"
+		} else {
+			for _, l := range s.Labels {
+				if len(l) >= 8 {
+					l = l[:7]
+					t += fmt.Sprintf("%-8s", l)
+				}
+			}
+		}
+	}
+
+	if s.Pos == nil && s.Color == nil && s.Style == nil {
+		t += "\n    not prepared"
+	} else {
+		t += "\n    prepared"
+	}
+	return t
+}
+
 // NewScale sets up a new scale for the given aesthetic, suitable for
 // the given data in field.
 func NewScale(aesthetic string, field Field) *Scale {
 	scale := Scale{}
 	scale.Discrete = field.Discrete()
-	scale.Type = aesthetic
+	if field.Type == Time {
+		scale.Time = true
+	}
+	scale.Aesthetic = aesthetic
 	scale.DomainMin = math.Inf(+1)
 	scale.DomainMax = math.Inf(-1)
 	scale.DomainLevels = NewFloatSet()
+
+	scale.Transform = &IdentityScale
 
 	return &scale
 }
 
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
-	println("Train ", s.Type)
+	println("Train ", s.Aesthetic)
 	if f.Discrete() {
 		// TODO: this depends on using the same StrIdx.
 		// Maybe there should be a single StrIdx per plot.
@@ -53,7 +121,7 @@ func (s *Scale) Train(f Field) {
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
-		println("Training continous scale ", s.Type, " with min =", min, "@", mini, " max =", max, "@", max)
+		println("Training continous scale ", s.Aesthetic, " with min =", min, "@", mini, " max =", max, "@", max)
 		if mini != -1 {
 			if min < s.DomainMin {
 				s.DomainMin = min
@@ -64,12 +132,12 @@ func (s *Scale) Train(f Field) {
 				s.DomainMax = max
 			}
 		}
-		println("Scale ", s.Type, " domain now = ", s.DomainMin, " - ", s.DomainMax)
+		println("Scale ", s.Aesthetic, " domain now = ", s.DomainMin, " - ", s.DomainMax)
 	}
 }
 
 func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
-	println("Train ", s.Type)
+	println("Train ", s.Aesthetic)
 	if s.Discrete {
 		// TODO: this depends on using the same StrIdx.
 		// Maybe there should be a single StrIdx per plot.
@@ -88,7 +156,7 @@ func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
 				s.DomainMax = max
 			}
 		}
-		println("Scale ", s.Type, " domain now = ", s.DomainMin, " - ", s.DomainMax)
+		println("Scale ", s.Aesthetic, " domain now = ", s.DomainMin, " - ", s.DomainMax)
 	}
 }
 
@@ -114,12 +182,12 @@ func (s *Scale) PrepareContinous() {
 	fullRange = max - min
 
 	fmt.Printf("Scale %s, cont. domain=[%.3f,%.3f] expanded=[%.3f,%.3f]\n",
-		s.Type, s.DomainMin, s.DomainMax, min, max)
+		s.Aesthetic, s.DomainMin, s.DomainMax, min, max)
 
 	// Set up breaks and labels
 	nb := 6
 	s.Breaks = make([]float64, nb+1)
-	s.Levels = make([]string, nb+1)
+	s.Labels = make([]string, nb+1)
 	for i := range s.Breaks {
 		x := s.DomainMin + float64(i)*fullRange/float64(nb)
 		s.Breaks[i] = x
@@ -135,8 +203,8 @@ func (s *Scale) PrepareContinous() {
 		}
 	}
 	for i, x := range s.Breaks {
-		s.Levels[i] = format(x, "")
-		fmt.Printf("  level %d = %s\n", i, s.Levels[i])
+		s.Labels[i] = format(x, "")
+		fmt.Printf("  level %d = %s\n", i, s.Labels[i])
 	}
 
 	// Produce mapping functions
@@ -163,4 +231,42 @@ func (s *Scale) PrepareContinous() {
 		c *= float64(StarPoint) // TODO
 		return int(c)
 	}
+}
+
+// -------------------------------------------------------------------------
+// Scale Transformations
+
+type ScaleTransform struct {
+	Name    string
+	Trans   func(float64) float64
+	Inverse func(float64) float64
+	Format  func(float64, string) string
+}
+
+var IdentityScale = ScaleTransform{
+	Name:    "Identity",
+	Trans:   func(x float64) float64 { return x },
+	Inverse: func(y float64) float64 { return y },
+	Format:  func(y float64, s string) string { return s },
+}
+
+var Log10Scale = ScaleTransform{
+	Name:    "Log10",
+	Trans:   func(x float64) float64 { return math.Log10(x) },
+	Inverse: func(y float64) float64 { return math.Pow(10, y) },
+	Format:  func(y float64, s string) string { return fmt.Sprintf("10^{%s}", s) },
+}
+
+var InvScale = ScaleTransform{
+	Name:    "1/x",
+	Trans:   func(x float64) float64 { return 1 / x },
+	Inverse: func(y float64) float64 { return 1 / y },
+	Format:  func(y float64, s string) string { return fmt.Sprintf("1/{%s}", s) },
+}
+
+var SqrtScale = ScaleTransform{
+	Name:    "Sqrt",
+	Trans:   func(x float64) float64 { return math.Sqrt(x) },
+	Inverse: func(y float64) float64 { return y * y },
+	Format:  func(y float64, s string) string { return fmt.Sprintf("%.1f", y*y) },
 }

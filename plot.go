@@ -152,7 +152,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			plot.Scales[a] = scale
 			println("Added new scale ", a)
 		} else {
-			println("Scale ", a, " exists with name ", scale.Type)
+			println("Scale ", a, " exists with name ", scale.Aesthetic)
 		}
 
 		// Transform scales if needed.
@@ -162,7 +162,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			println("Transform data on scale ", a)
 		}
 		// Pre-train scales
-		println("Pretraining ", a, " ", scale.Type)
+		println("Pretraining ", a, " ", scale.Aesthetic)
 		scale.Train(data.Columns[a])
 	}
 
@@ -561,27 +561,6 @@ type Viewport struct {
 	// The rectangel of this vp
 
 	// Functions to turn grob coordinates to pixel
-}
-
-// -------------------------------------------------------------------------
-// Scale Transformations
-
-type ScaleTransform struct {
-	Trans   func(float64) float64
-	Inverse func(float64) float64
-	Format  func(float64, string) string
-}
-
-var Log10Scale = ScaleTransform{
-	Trans:   func(x float64) float64 { return math.Log10(x) },
-	Inverse: func(y float64) float64 { return math.Pow(10, y) },
-	Format:  func(y float64, s string) string { return fmt.Sprintf("10^{%s}", s) },
-}
-
-var IdentityScale = ScaleTransform{
-	Trans:   func(x float64) float64 { return x },
-	Inverse: func(y float64) float64 { return y },
-	Format:  func(y float64, s string) string { return s },
 }
 
 // -------------------------------------------------------------------------

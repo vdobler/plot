@@ -109,15 +109,15 @@ func TestIndividualSteps(t *testing.T) {
 				GeomMapping: nil,
 			},
 			&Layer{
-				Name: "Histogram",
-				DataMapping: AesMapping{ "y": "" }, // clear mapping of y to Height
-				Stat: &StatBin{Drop: true},
-				StatMapping: AesMapping {
+				Name:        "Histogram",
+				DataMapping: AesMapping{"y": ""}, // clear mapping of y to Height
+				Stat:        &StatBin{Drop: true},
+				StatMapping: AesMapping{
 					"y": "count",
 				},
 				Geom: GeomBar{
 					Style: AesMapping{
-						"fill":  "gray50",
+						"fill": "gray50",
 					},
 				},
 			},
@@ -140,14 +140,14 @@ func TestIndividualSteps(t *testing.T) {
 	if sx, ok := plot.Scales["x"]; !ok {
 		t.Errorf("Missing x scale")
 	} else {
-		if sx.Discrete || sx.Transform != nil || sx.Type != "x" {
+		if sx.Discrete || sx.Transform != &IdentityScale || sx.Aesthetic != "x" {
 			t.Errorf("Scale x = %+v", sx)
 		}
 	}
 	if sy, ok := plot.Scales["y"]; !ok {
 		t.Errorf("Missing y scale")
 	} else {
-		if sy.Discrete || sy.Transform != nil || sy.Type != "y" {
+		if sy.Discrete || sy.Transform != &IdentityScale || sy.Aesthetic != "y" {
 			t.Errorf("Scale y = %+v", sy)
 		}
 	}
