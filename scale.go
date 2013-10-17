@@ -23,7 +23,7 @@ type Scale struct {
 	DomainLevels FloatSet
 
 	// The Fix... fields can be used to manually set the domain
-	// of this scale to fixed values.
+	// of this scale to fixed values. Must be different/non-empty.
 	FixMin    float64
 	FixMax    float64
 	FixLevels FloatSet
@@ -45,6 +45,25 @@ type Scale struct {
 	Style func(x float64) int         // point and line type. Range ???
 }
 
+// NewScale sets up a new scale for the given aesthetic, suitable for
+// the given data in field.
+func NewScale(aesthetic string, field Field) *Scale {
+	scale := Scale{}
+	scale.Discrete = field.Discrete()
+	if field.Type == Time {
+		scale.Time = true
+	}
+	scale.Aesthetic = aesthetic
+	scale.DomainMin = math.Inf(+1)
+	scale.DomainMax = math.Inf(-1)
+	scale.DomainLevels = NewFloatSet()
+
+	scale.Transform = &IdentityScale
+
+	return &scale
+}
+
+// String pretty prints s.
 func (s *Scale) String() string {
 	f2t := func(x float64) string {
 		return time.Unix(int64(x), 0).Format("2006-01-02 15:04:05")
@@ -92,23 +111,8 @@ func (s *Scale) String() string {
 	return t
 }
 
-// NewScale sets up a new scale for the given aesthetic, suitable for
-// the given data in field.
-func NewScale(aesthetic string, field Field) *Scale {
-	scale := Scale{}
-	scale.Discrete = field.Discrete()
-	if field.Type == Time {
-		scale.Time = true
-	}
-	scale.Aesthetic = aesthetic
-	scale.DomainMin = math.Inf(+1)
-	scale.DomainMax = math.Inf(-1)
-	scale.DomainLevels = NewFloatSet()
-
-	scale.Transform = &IdentityScale
-
-	return &scale
-}
+// -------------------------------------------------------------------------
+// Training
 
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
@@ -133,6 +137,8 @@ func (s *Scale) Train(f Field) {
 	}
 }
 
+// Retrain works basically like Train but makes sure that the whole
+// size occupied by the geom used is included into the training.
 func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
 	if s.Discrete {
 		// TODO: this depends on using the same StrIdx.
@@ -155,6 +161,9 @@ func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
 	}
 }
 
+// -------------------------------------------------------------------------
+// Preparing a scale
+
 // Prepare initialises the remaining fields after training.
 func (s *Scale) Prepare() {
 	if s.Discrete {
@@ -169,6 +178,50 @@ func (s *Scale) PrepareDiscrete() {
 	panic("Implement me")
 }
 
+// TODO: Scale needs access to data frame field to print string values
+func (s *Scale) PrepareContinous() {
+	min, max := s.DomainMin, s.DomainMax
+	if s.FixMin != s.FixMax {
+		min, max = s.FixMin, s.FixMax
+	}
+	expand := (max - min) * 0.05
+	min -= expand
+	max += expand
+	fullRange := max - min
+
+	// Set up breaks and labels
+	if len(s.Breaks) == 0 {
+		// All auto.
+		s.PrepareBreaks(min, max, 5)
+	}
+	s.PrepareLabels()
+
+	// Produce mapping functions
+	s.Pos = func(x float64) float64 {
+		return (x - min) / fullRange
+	}
+	s.Color = func(x float64) color.Color {
+		c := s.Pos(x)
+		// TODO (a lot)
+		if c < 1/3 {
+			r := uint8(c * 3 * 255)
+			return color.RGBA{r, 0xff - r, 0, 0xff}
+		} else if c < 2/3 {
+			r := uint8((c - 1/3) * 3 * 255)
+			return color.RGBA{0, r, 0xff - r, 0xff}
+		} else {
+			r := uint8((c - 2/3) * 3 * 255)
+			return color.RGBA{0xff - r, 0, r, 0xff}
+		}
+		return color.RGBA{}
+	}
+	s.Style = func(x float64) int {
+		c := s.Pos(x)
+		c *= float64(StarPoint) // TODO
+		return int(c)
+	}
+}
+
 // PrepareBreaks populates s.breaks with suitable values.
 // Suitable values for a range of [55,125] are [60,80,100,120].
 // TODO: For a log10 transformed scale the breaks should be
@@ -178,13 +231,12 @@ func (s *Scale) PrepareDiscrete() {
 // raw [12,88] --log10--> [1.08,1.94] --break--> [1.2,1.4,1.6,1.8]
 // which gives [15.8, 25.1, 39.8, 63.1] wich is ugly. More
 // dramatic on sqrt or 1/x transforms.
-func (s *Scale) PrepareBreaks() (float64, float64) {
+func (s *Scale) PrepareBreaks(min, max float64, num int) (float64, float64) {
 	if s.Discrete || s.Time {
 		panic("Implement me")
 	}
 
-	num := 5
-	fullRange := s.DomainMax - s.DomainMin
+	fullRange := max - min
 
 	// Decompose delta into the form delta = f * mag
 	// with mag a power of 10 and 0 < f < 10.
@@ -209,24 +261,13 @@ func (s *Scale) PrepareBreaks() (float64, float64) {
 	}
 	step *= mag
 
-	x := math.Ceil(s.DomainMin / step)
+	x := math.Ceil(min / step)
 	for x < s.DomainMax {
 		s.Breaks = append(s.Breaks, x)
 		x += step
 	}
 
 	return step, mag
-}
-
-// TODO: Much more logic needed
-func (s *Scale) ChooseFloatFormatter() func(x float64) string {
-	f := "%d"
-	if math.Abs(s.Breaks[0]) < 1 || math.Abs(s.Breaks[len(s.Breaks)-1]) < 1 {
-		f = "%.1f" // BUG
-	}
-	return func(x float64) string {
-		return fmt.Sprintf(f, x)
-	}
 }
 
 // PrepareLabels sets up s.Labels (if empty) by formating s.Breaks.
@@ -248,44 +289,14 @@ func (s *Scale) PrepareLabels() {
 	}
 }
 
-// TODO: Scale needs access to data frame field to print string values
-func (s *Scale) PrepareContinous() {
-	fullRange := s.DomainMax - s.DomainMin
-	expand := fullRange * 0.05
-	s.DomainMin -= expand
-	s.DomainMax += expand
-	fullRange = s.DomainMax - s.DomainMin
-
-	// Set up breaks and labels
-	if len(s.Breaks) == 0 {
-		// All auto.
-		s.PrepareBreaks()
+// TODO: Much more logic needed
+func (s *Scale) ChooseFloatFormatter() func(x float64) string {
+	f := "%d"
+	if math.Abs(s.Breaks[0]) < 1 || math.Abs(s.Breaks[len(s.Breaks)-1]) < 1 {
+		f = "%.1f" // BUG
 	}
-	s.PrepareLabels()
-
-	// Produce mapping functions
-	s.Pos = func(x float64) float64 {
-		return (x - s.DomainMin) / fullRange
-	}
-	s.Color = func(x float64) color.Color {
-		c := s.Pos(x)
-		// TODO (a lot)
-		if c < 1/3 {
-			r := uint8(c * 3 * 255)
-			return color.RGBA{r, 0xff - r, 0, 0xff}
-		} else if c < 2/3 {
-			r := uint8((c - 1/3) * 3 * 255)
-			return color.RGBA{0, r, 0xff - r, 0xff}
-		} else {
-			r := uint8((c - 2/3) * 3 * 255)
-			return color.RGBA{0xff - r, 0, r, 0xff}
-		}
-		return color.RGBA{}
-	}
-	s.Style = func(x float64) int {
-		c := s.Pos(x)
-		c *= float64(StarPoint) // TODO
-		return int(c)
+	return func(x float64) string {
+		return fmt.Sprintf(f, x)
 	}
 }
 
