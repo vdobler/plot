@@ -78,8 +78,8 @@ func (s *Scale) String() string {
 			for _, l := range s.Labels {
 				if len(l) >= 8 {
 					l = l[:7]
-					t += fmt.Sprintf("%-8s", l)
 				}
+				t += fmt.Sprintf("%8s", l)
 			}
 		}
 	}
@@ -112,7 +112,6 @@ func NewScale(aesthetic string, field Field) *Scale {
 
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
-	println("Train ", s.Aesthetic)
 	if f.Discrete() {
 		// TODO: this depends on using the same StrIdx.
 		// Maybe there should be a single StrIdx per plot.
@@ -121,7 +120,6 @@ func (s *Scale) Train(f Field) {
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
-		println("Training continous scale ", s.Aesthetic, " with min =", min, "@", mini, " max =", max, "@", max)
 		if mini != -1 {
 			if min < s.DomainMin {
 				s.DomainMin = min
@@ -132,12 +130,10 @@ func (s *Scale) Train(f Field) {
 				s.DomainMax = max
 			}
 		}
-		println("Scale ", s.Aesthetic, " domain now = ", s.DomainMin, " - ", s.DomainMax)
 	}
 }
 
 func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
-	println("Train ", s.Aesthetic)
 	if s.Discrete {
 		// TODO: this depends on using the same StrIdx.
 		// Maybe there should be a single StrIdx per plot.
@@ -156,7 +152,6 @@ func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
 				s.DomainMax = max
 			}
 		}
-		println("Scale ", s.Aesthetic, " domain now = ", s.DomainMin, " - ", s.DomainMax)
 	}
 }
 
@@ -174,42 +169,103 @@ func (s *Scale) PrepareDiscrete() {
 	panic("Implement me")
 }
 
+// PrepareBreaks populates s.breaks with suitable values.
+// Suitable values for a range of [55,125] are [60,80,100,120].
+// TODO: For a log10 transformed scale the breaks should be
+// plain integers:
+//   Raw data [0.01,100] --log10--> [-2,2] --break--> [-2,-1,0,1,2]
+// this should work, but what with
+// raw [12,88] --log10--> [1.08,1.94] --break--> [1.2,1.4,1.6,1.8]
+// which gives [15.8, 25.1, 39.8, 63.1] wich is ugly. More
+// dramatic on sqrt or 1/x transforms.
+func (s *Scale) PrepareBreaks() (float64, float64) {
+	if s.Discrete || s.Time {
+		panic("Implement me")
+	}
+
+	num := 5
+	fullRange := s.DomainMax - s.DomainMin
+
+	// Decompose delta into the form delta = f * mag
+	// with mag a power of 10 and 0 < f < 10.
+	delta := fullRange / float64(num)
+	mag := math.Pow10(int(math.Floor(math.Log10(delta))))
+	f := delta / mag
+
+	step := 0.0
+
+	switch {
+	case f < 1.8:
+		step = 1
+	case f < 3:
+		step = 2.5
+	case f < 4:
+		step = 2
+	case f < 9:
+		step = 5
+	default:
+		step = 1
+		mag *= 10
+	}
+	step *= mag
+
+	x := math.Ceil(s.DomainMin / step)
+	for x < s.DomainMax {
+		s.Breaks = append(s.Breaks, x)
+		x += step
+	}
+
+	return step, mag
+}
+
+// TODO: Much more logic needed
+func (s *Scale) ChooseFloatFormatter() func(x float64) string {
+	f := "%d"
+	if math.Abs(s.Breaks[0]) < 1 || math.Abs(s.Breaks[len(s.Breaks)-1]) < 1 {
+		f = "%.1f" // BUG
+	}
+	return func(x float64) string {
+		return fmt.Sprintf(f, x)
+	}
+}
+
+// PrepareLabels sets up s.Labels (if empty) by formating s.Breaks.
+func (s *Scale) PrepareLabels() {
+	if len(s.Labels) == 0 {
+		// Automatic label creation.
+		formatter := s.ChooseFloatFormatter()
+		for _, b := range s.Breaks {
+			s.Labels = append(s.Labels, formatter(b))
+		}
+	} else {
+		// User provided labels. Sanitize them.
+		nl, nb := len(s.Labels), len(s.Breaks)
+		if nl > nb {
+			s.Labels = s.Labels[:nb]
+		} else if nl < nb {
+			panic("Implement me")
+		}
+	}
+}
+
 // TODO: Scale needs access to data frame field to print string values
 func (s *Scale) PrepareContinous() {
 	fullRange := s.DomainMax - s.DomainMin
 	expand := fullRange * 0.05
-	min, max := s.DomainMin-expand, s.DomainMax+expand
-	fullRange = max - min
-
-	fmt.Printf("Scale %s, cont. domain=[%.3f,%.3f] expanded=[%.3f,%.3f]\n",
-		s.Aesthetic, s.DomainMin, s.DomainMax, min, max)
+	s.DomainMin -= expand
+	s.DomainMax += expand
+	fullRange = s.DomainMax - s.DomainMin
 
 	// Set up breaks and labels
-	nb := 6
-	s.Breaks = make([]float64, nb+1)
-	s.Labels = make([]string, nb+1)
-	for i := range s.Breaks {
-		x := s.DomainMin + float64(i)*fullRange/float64(nb)
-		s.Breaks[i] = x
-		fmt.Printf("  break %d = %.3f\n", i, x)
+	if len(s.Breaks) == 0 {
+		// All auto.
+		s.PrepareBreaks()
 	}
-	// TODO: ugly should be initialised to identitiy transform
-	var format func(float64, string) string
-	if t := s.Transform; t != nil {
-		format = t.Format
-	} else {
-		format = func(x float64, s string) string {
-			return fmt.Sprintf("%g", x)
-		}
-	}
-	for i, x := range s.Breaks {
-		s.Labels[i] = format(x, "")
-		fmt.Printf("  level %d = %s\n", i, s.Labels[i])
-	}
+	s.PrepareLabels()
 
 	// Produce mapping functions
 	s.Pos = func(x float64) float64 {
-		return (x - min) / fullRange
+		return (x - s.DomainMin) / fullRange
 	}
 	s.Color = func(x float64) color.Color {
 		c := s.Pos(x)

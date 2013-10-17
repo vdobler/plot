@@ -204,6 +204,8 @@ func TestIndividualSteps(t *testing.T) {
 			t.Errorf("Bad training: %f %f", sx.DomainMin, sx.DomainMax)
 		}
 	}
+	fmt.Printf("%s\n", plot.Scales["x"])
+	fmt.Printf("%s\n", plot.Scales["y"])
 
 	// Render Geoms to Grobs using scales (Step7).
 	plot.RenderGeoms()
