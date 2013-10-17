@@ -490,11 +490,11 @@ func (f Field) Levels() FloatSet {
 // MinMax returns the minimum and maximum element and their indixes.
 func MinMax(df *DataFrame, field string) (minval, maxval float64, minidx, maxidx int) {
 	if df == nil {
-		return 0, 0, -1, -1
+		return math.NaN(), math.NaN(), -1, -1
 	}
 	_, ok := df.Columns[field]
 	if !ok {
-		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
+		return math.NaN(), math.NaN(), -1, -1
 	}
 
 	return df.Columns[field].MinMax()
@@ -502,7 +502,7 @@ func MinMax(df *DataFrame, field string) (minval, maxval float64, minidx, maxidx
 
 func (f Field) MinMax() (minval, maxval float64, minidx, maxidx int) {
 	if len(f.Data) == 0 {
-		return 0, 0, -1, -1
+		return math.NaN(), math.NaN(), -1, -1
 	}
 
 	column := f.Data

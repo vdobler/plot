@@ -1,6 +1,10 @@
 package plot
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"strings"
+)
 
 var _ = fmt.Printf
 
@@ -8,18 +12,21 @@ var _ = fmt.Printf
 //
 // Setting aesthetics of a geom is a major TODO!
 type Geom interface {
-	Name() string
-	NeededSlots() []string
-	OptionalSlots() []string
+	Name() string            // The name of the geom.
+	NeededSlots() []string   // The needed slots to construct this geom.
+	OptionalSlots() []string // The optional slots this geom understands.
 
 	// Aes returns the merged default (fixed) aesthetics.
 	Aes(plot *Plot) AesMapping
 
-	// Apply position adjustments (dodge, stack, fill, identity, jitter)
+	// Apply position adjustments (dodge, stack, fill, identity, jitter).
 	AdjustPosition(df *DataFrame, posAdj PositionAdjust)
 
-	// Reparametirze to simpler Geom
+	// Reparametrize to fundamental Geom.
 	Reparametrize(df *DataFrame) Geom
+
+	// Compute min and max of the given aestetics on df.
+	Bounds(aes string, df *DataFrame) (min, max float64)
 
 	// Render interpretes data as the specific geom and produces Grobs.
 	// TODO: Grouping?
@@ -50,6 +57,10 @@ func (p GeomPoint) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
 func (p GeomPoint) Reparametrize(df *DataFrame) Geom {
 	// No reparamization in fundamental geom.
 	return p
+}
+
+func (p GeomPoint) Bounds(aes string, df *DataFrame) (min, max float64) {
+	return ComputeBounds(aes, df, nil)
 }
 
 func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -104,6 +115,10 @@ func (p GeomLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
 func (p GeomLine) Reparametrize(df *DataFrame) Geom {
 	// No reparamization in fundamental geom.
 	return p
+}
+
+func (p GeomLine) Bounds(aes string, df *DataFrame) (min, max float64) {
+	return ComputeBounds(aes, df, nil)
 }
 
 func (p GeomLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -178,6 +193,10 @@ func (p GeomABLine) Reparametrize(df *DataFrame) Geom {
 	return p
 }
 
+func (p GeomABLine) Bounds(aes string, df *DataFrame) (min, max float64) {
+	return ComputeBounds(aes, df, nil)
+}
+
 func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
 	ic, sc := data.Columns["intercept"].Data, data.Columns["slope"].Data
 	grobs := make([]Grob, data.N)
@@ -233,6 +252,10 @@ func (t GeomText) Reparametrize(df *DataFrame) Geom {
 	return t
 }
 
+func (t GeomText) Bounds(aes string, df *DataFrame) (min, max float64) {
+	return ComputeBounds(aes, df, nil)
+}
+
 func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
 	x, y, s := data.Columns["x"], data.Columns["y"], data.Columns["text"]
 	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
@@ -279,6 +302,11 @@ func (b GeomBar) Aes(plot *Plot) AesMapping {
 
 func (b GeomBar) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
 	// TODO
+}
+
+func (b GeomBar) Bounds(aes string, df *DataFrame) (min, max float64) {
+	panic("Should not be called")
+	return ComputeBounds(aes, df, nil)
 }
 
 func (b GeomBar) Reparametrize(df *DataFrame) Geom {
@@ -346,6 +374,52 @@ func (r GeomRect) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
 
 func (r GeomRect) Reparametrize(df *DataFrame) Geom {
 	return r
+}
+
+func minOf(a, b float64) float64 {
+	if math.IsNaN(a) {
+		return b
+	}
+	if math.IsNaN(b) {
+		return a
+	}
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxOf(a, b float64) float64 {
+	if math.IsNaN(a) {
+		return b
+	}
+	if math.IsNaN(b) {
+		return a
+	}
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func ComputeBounds(aes string, df *DataFrame, combined map[string]string) (min, max float64) {
+	min, max = math.NaN(), math.NaN()
+	if len(combined) > 0 && combined[aes] != "" {
+		for _, field := range strings.Split(combined[aes], ",") {
+			low, high, _, _ := MinMax(df, field)
+			min = minOf(min, low)
+			max = maxOf(max, high)
+		}
+	} else {
+		low, high, _, _ := MinMax(df, aes)
+		min = minOf(min, low)
+		max = maxOf(max, high)
+	}
+	return min, max
+}
+
+func (r GeomRect) Bounds(aes string, df *DataFrame) (min, max float64) {
+	return ComputeBounds(aes, df, map[string]string{"x": "xmin,xmax", "y": "ymin,ymax"})
 }
 
 func (r GeomRect) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {

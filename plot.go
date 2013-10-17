@@ -50,7 +50,6 @@ type Layer struct {
 
 	// Geom is the geom to use for this layer
 	Geom        Geom
-	RepGeom     Geom // The reparametrized geom
 	GeomMapping AesMapping
 
 	Position PositionAdjust
@@ -119,6 +118,30 @@ func (s *Scale) Train(f Field) {
 			}
 		}
 		if maxi != -1 {
+			if max > s.DomainMax {
+				s.DomainMax = max
+			}
+		}
+		println("Scale ", s.Type, " domain now = ", s.DomainMin, " - ", s.DomainMax)
+	}
+}
+
+func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
+	println("Train ", s.Type)
+	if s.Discrete {
+		// TODO: this depends on using the same StrIdx.
+		// Maybe there should be a single StrIdx per plot.
+		// This would internalize string valuies properly.
+		panic("Implement me")
+	} else {
+		// Continous data.
+		min, max := geom.Bounds(aes, df)
+		if !math.IsNaN(min) {
+			if min < s.DomainMin {
+				s.DomainMin = min
+			}
+		}
+		if !math.IsNaN(max) {
 			if max > s.DomainMax {
 				s.DomainMax = max
 			}
@@ -431,16 +454,18 @@ func (p *Plot) ConstructGeoms() {
 		layer.Geom.AdjustPosition(layer.Data, layer.Position)
 
 		// (Step 5b)
-		layer.RepGeom = layer.Geom.Reparametrize(layer.Data)
+		layer.Geom = layer.Geom.Reparametrize(layer.Data)
 	}
 }
 
 func (p *Plot) RetrainScales() {
 	for aes, scale := range p.Scales {
 		for _, layer := range p.Layers {
-			if col, ok := layer.Data.Columns[aes]; ok {
-				scale.Train(col)
+			if layer.Geom == nil {
+				println("Retrain scale: No geom on layer ", layer.Name)
 			}
+
+			scale.Retrain(aes, layer.Geom, layer.Data)
 		}
 		scale.Prepare()
 	}
@@ -448,10 +473,10 @@ func (p *Plot) RetrainScales() {
 
 func (p *Plot) RenderGeoms() {
 	for _, layer := range p.Layers {
-		if layer.RepGeom != nil {
+		if layer.Geom != nil {
 			data := layer.Data
 			aes := layer.Geom.Aes(p)
-			layer.Grobs = layer.RepGeom.Render(p, data, aes)
+			layer.Grobs = layer.Geom.Render(p, data, aes)
 		}
 	}
 }
