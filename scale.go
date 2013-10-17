@@ -49,9 +49,11 @@ type Scale struct {
 // the given data in field.
 func NewScale(aesthetic string, field Field) *Scale {
 	scale := Scale{}
-	scale.Discrete = field.Discrete()
-	if field.Type == Time {
+	switch field.Type {
+	case Time:
 		scale.Time = true
+	case String:
+		scale.Discrete = true
 	}
 	scale.Aesthetic = aesthetic
 	scale.DomainMin = math.Inf(+1)
