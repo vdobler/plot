@@ -103,6 +103,7 @@ func NewScale(aesthetic string, field Field) *Scale {
 
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
+	println("Train ", s.Type)
 	if f.Discrete() {
 		// TODO: this depends on using the same StrIdx.
 		// Maybe there should be a single StrIdx per plot.
@@ -111,6 +112,7 @@ func (s *Scale) Train(f Field) {
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
+		println("Training continous scale ", s.Type, " with min =",min,"@",mini, " max =",max,"@",max)
 		if mini != -1 {
 			if min < s.DomainMin {
 				s.DomainMin = min
@@ -121,6 +123,7 @@ func (s *Scale) Train(f Field) {
 				s.DomainMax = max
 			}
 		}
+		println("Scale ", s.Type, " domain now = ", s.DomainMin, " - ", s.DomainMax)
 	}
 }
 
@@ -270,7 +273,9 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 	}
 
 	for a := range aes {
+		println("PrepareScales working on ",a)
 		if !scaleable[a] {
+			println("Un-scalable scale ", a)
 			continue
 		}
 
@@ -281,14 +286,19 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			// Add appropriate scale.
 			scale = NewScale(a, data.Columns[a])
 			plot.Scales[a] = scale
+			println("Added new scale ", a)
+		} else {
+			println("Scale ", a, " exists with name ", scale.Type)
 		}
 
 		// Transform scales if needed.
 		if scale.Transform != nil {
 			field := data.Columns[a]
 			field.Apply(scale.Transform.Trans)
+			println("Transform data on scale ", a)
 		}
 		// Pre-train scales
+		println("Pretraining ", a, " ", scale.Type)
 		scale.Train(data.Columns[a])
 	}
 
@@ -366,8 +376,17 @@ func (layer *Layer) ComputeStatistics() {
 	// Do this now.
 	if len(layer.StatMapping) == 0 {
 		return
+		// TODO: this also misses training the scales...
 	}
 
+	fmt.Printf("Layer %s: preparing scales with stat mapping %v\n",
+		layer.Name, layer.StatMapping)
+
+	// Rename mapped fields to their aestethic name
+	for a, f := range layer.StatMapping {
+		layer.Data.Rename(f, a)
+		println("Renaming ",f, " to ", a, " because of stat mapping.")
+	}
 	layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
 }
 
@@ -649,7 +668,13 @@ func (m AesMapping) Copy() AesMapping {
 
 // Merge merges set values in all the ams into m and returns the merged mapping.
 func MergeAes(ams ...AesMapping) AesMapping {
-	return MergeStyles(ams...)
+	merged := MergeStyles(ams...)
+	for k, v := range merged {
+		if v == "" {
+			delete(merged, k)
+		}
+	}
+	return merged
 }
 
 // Combine merges set values in all the ams into m and returns the merged mapping.

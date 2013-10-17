@@ -108,6 +108,19 @@ func TestIndividualSteps(t *testing.T) {
 				},
 				GeomMapping: nil,
 			},
+			&Layer{
+				Name: "Histogram",
+				DataMapping: AesMapping{ "y": "" }, // clear mapping of y to Height
+				Stat: &StatBin{Drop: true},
+				StatMapping: AesMapping {
+					"y": "count",
+				},
+				Geom: GeomBar{
+					Style: AesMapping{
+						"fill":  "gray50",
+					},
+				},
+			},
 		},
 		Scales: make(map[string]*Scale),
 	}
@@ -157,6 +170,23 @@ func TestIndividualSteps(t *testing.T) {
 	t.Logf("Intercept = %.2f   Slope = %.2f",
 		data.Columns["intercept"].Data[0],
 		data.Columns["slope"].Data[0])
+	// StatLabels produces labels
+	if fields := plot.Layers[2].Data.FieldNames(); !same(fields, []string{"x", "y", "text"}) {
+		t.Errorf("Layer 2 DF has fields %v", fields)
+	}
+	data = plot.Layers[2].Data
+	if data.N != 20 {
+		t.Errorf("Got %d data in label df.", plot.Layers[2].Data.N)
+	}
+
+	// StatBin produces bins
+	if fields := plot.Layers[3].Data.FieldNames(); !same(fields, []string{"x", "count", "ncount", "density", "ndensity"}) {
+		t.Errorf("Layer 3 DF has fields %v", fields)
+	}
+	data = plot.Layers[3].Data
+	if data.N != 11 {
+		t.Errorf("Got %d data in binned df.", plot.Layers[3].Data.N)
+	}
 
 	// Test Construct ConstructGeoms. This shouldn't change much as
 	// GeomABLine doesn't reparametrize and we don't do position adjustments.
@@ -187,6 +217,10 @@ func TestIndividualSteps(t *testing.T) {
 	}
 	fmt.Println("Layer 2, labels")
 	for _, grob := range plot.Layers[2].Grobs {
+		fmt.Println("  ", grob.String())
+	}
+	fmt.Println("Layer 3, histogram")
+	for _, grob := range plot.Layers[3].Grobs {
 		fmt.Println("  ", grob.String())
 	}
 

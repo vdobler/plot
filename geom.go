@@ -82,13 +82,6 @@ func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob 
 }
 
 // -------------------------------------------------------------------------
-// Geom Bar
-
-type GeomBar struct {
-	Style AesMapping // The individal fixed, aka non-mapped aesthetics
-}
-
-// -------------------------------------------------------------------------
 // Geom Line
 type GeomLine struct {
 	Style AesMapping // The individal fixed, aka non-mapped aesthetics
@@ -241,12 +234,8 @@ func (t GeomText) Reparametrize(df *DataFrame) Geom {
 }
 
 func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
-	fmt.Printf("Rendering Geom %v\n", t)
-
 	x, y, s := data.Columns["x"], data.Columns["y"], data.Columns["text"]
 	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
-
-	fmt.Printf("::: GeomText Render: type of column text: %s\n", s.Type)
 
 	colFunc := makeColorFunc("color", data, plot, style)
 	sizeFunc := makePosFunc("size", data, plot, style)
@@ -261,12 +250,160 @@ func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
 		grob := GrobText{
 			x:     xf(x.Data[i]),
 			y:     yf(y.Data[i]),
-			text: text,
+			text:  text,
 			color: color,
 			size:  sizeFunc(i),
-			angle:  angleFunc(i),
+			angle: angleFunc(i),
 		}
 		grobs[i] = grob
+	}
+	return grobs
+}
+
+// -------------------------------------------------------------------------
+// Geom Bar
+
+type GeomBar struct {
+	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+}
+
+var _ Geom = GeomBar{}
+
+func (b GeomBar) Name() string            { return "GeomBar" }
+func (b GeomBar) NeededSlots() []string   { return []string{"x", "y"} }
+func (b GeomBar) OptionalSlots() []string { return []string{"color", "size", "linetype", "alpha"} }
+
+func (b GeomBar) Aes(plot *Plot) AesMapping {
+	return MergeStyles(b.Style, plot.Theme.BarStyle, DefaultTheme.BarStyle)
+}
+
+func (b GeomBar) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
+	// TODO
+}
+
+func (b GeomBar) Reparametrize(df *DataFrame) Geom {
+	xf := df.Columns["x"]
+	if !df.Has("width") {
+		width := xf.Resolution() * 0.9
+		wf := xf.Const(width, df.N)
+		df.Columns["width"] = wf
+	}
+
+	yf, wf := df.Columns["y"], df.Columns["width"]
+
+	xmin, ymin := NewField(df.N), NewField(df.N)
+	xmax, ymax := NewField(df.N), NewField(df.N)
+	xmin.Type, ymin.Type, xmax.Type, ymax.Type = Float, Float, Float, Float
+
+	for i := 0; i < df.N; i++ {
+		if y := yf.Data[i]; y > 0 {
+			ymin.Data[i] = 0
+			ymax.Data[i] = y
+		} else {
+			ymin.Data[i] = y
+			ymax.Data[i] = 0
+		}
+		x, wh := xf.Data[i], wf.Data[i]/2
+		xmin.Data[i] = x - wh
+		xmax.Data[i] = x + wh
+	}
+	df.Columns["xmin"] = xmin
+	df.Columns["ymin"] = ymin
+	df.Columns["xmax"] = xmax
+	df.Columns["ymax"] = ymax
+	df.Delete("width")
+	df.Delete("x")
+	df.Delete("y")
+
+	return GeomRect{Style: b.Style.Copy()}
+}
+
+func (b GeomBar) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+	panic("Bar has no own render") // TODO: ugly. Maybe remodel Geom inheritance
+}
+
+// -------------------------------------------------------------------------
+// Geom Rect
+
+type GeomRect struct {
+	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+}
+
+var _ Geom = GeomRect{}
+
+func (r GeomRect) Name() string          { return "GeomRect" }
+func (r GeomRect) NeededSlots() []string { return []string{"xmin", "ymin", "xmax", "ymax"} }
+func (r GeomRect) OptionalSlots() []string {
+	return []string{"color", "fill", "linetype", "alpha", "size"}
+}
+
+func (r GeomRect) Aes(plot *Plot) AesMapping {
+	return MergeStyles(r.Style, plot.Theme.RectStyle, DefaultTheme.RectStyle)
+}
+
+func (r GeomRect) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
+}
+
+func (r GeomRect) Reparametrize(df *DataFrame) Geom {
+	return r
+}
+
+func (r GeomRect) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+	xmin, ymin := data.Columns["xmin"].Data, data.Columns["ymin"].Data
+	xmax, ymax := data.Columns["xmax"].Data, data.Columns["ymax"].Data
+	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
+
+	fmt.Printf("xmin: %+v\n", xmin)
+	fmt.Printf("ymin: %+v\n", ymin)
+	fmt.Printf("ymax: %+v\n", ymax)
+	fmt.Printf("yscale domain  %.2f  -- %.2f\n", plot.Scales["y"].DomainMin, plot.Scales["y"].DomainMax)
+	colFunc := makeColorFunc("color", data, plot, style)
+	fillFunc := makeColorFunc("fill", data, plot, style)
+	linetypeFunc := makeStyleFunc("linetype", data, plot, style)
+	alphaFunc := makePosFunc("alpha", data, plot, style)
+	sizeFunc := makePosFunc("size", data, plot, style)
+
+	grobs := make([]Grob, 0)
+	for i := 0; i < data.N; i++ {
+		println("******* ", i)
+		alpha := alphaFunc(i)
+		if alpha == 0 {
+			continue // Won't be visibale anyway....
+		}
+
+		// Coordinates of diagonal corners.
+		x0, y0 := xf(xmin[i]), yf(ymin[i])
+		x1, y1 := xf(xmax[i]), yf(ymax[i])
+		// TODO: swap if wrong order
+
+		rect := GrobRect{
+			xmin: x0,
+			ymin: y0,
+			xmax: x1,
+			ymax: y1,
+			fill: SetAlpha(fillFunc(i), alpha),
+		}
+		grobs = append(grobs, rect)
+
+		// Drown border only if linetype != blank.
+		lt := LineType(linetypeFunc(i))
+		if lt == BlankLine {
+			continue
+		}
+		color := SetAlpha(colFunc(i), alpha)
+		points := make([]struct{ x, y float64 }, 5)
+		points[0].x, points[0].y = x0, y0
+		points[1].x, points[1].y = x1, y0
+		points[2].x, points[2].y = x1, y1
+		points[3].x, points[3].y = x0, y1
+		points[4].x, points[4].y = x0, y0
+		border := GrobPath{
+			points:   points,
+			linetype: lt,
+			color:    color,
+			size:     sizeFunc(i),
+		}
+		grobs = append(grobs, border)
 	}
 	return grobs
 }

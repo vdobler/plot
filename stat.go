@@ -107,7 +107,7 @@ func (s StatBin) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	Density := NewField(nr)
 	NDensity := NewField(nr)
 	X.Type = data.Columns["x"].Type
-	Count.Type = Int
+	Count.Type = Float
 	NCount.Type = Float
 	Density.Type = Float
 	NDensity.Type = Float

@@ -3,6 +3,7 @@ package plot
 type Theme struct {
 	PointStyle, LineStyle, BarStyle AesMapping
 	TextStyle                       AesMapping
+	RectStyle                       AesMapping
 }
 
 var DefaultTheme = Theme{
@@ -33,5 +34,11 @@ var DefaultTheme = Theme{
 		"vjust":      "0.5",
 		"hjust":      "0.5",
 		"angle":      "0",
+	},
+	RectStyle: AesMapping{
+		"linetype": "blank",
+		"color":    "#00000000",
+		"fill":     "gray50",
+		"alpha":    "1",
 	},
 }

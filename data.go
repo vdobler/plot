@@ -122,6 +122,11 @@ func (df *DataFrame) Rename(o, n string) {
 	df.Columns[n] = col
 }
 
+func (df *DataFrame) Delete(fn string) {
+	delete(df.Columns, fn)
+}
+
+
 func (df *DataFrame) Apply(field string, f func(float64) float64) {
 	if df.Columns[field].Type == String {
 		panic(fmt.Sprintf("Cannot transform String column %s in %s", field, df.Name))
@@ -567,4 +572,16 @@ func GroupingField(data *DataFrame, names []string) Field {
 		field.Data[i] = float64(field.AddStr(group))
 	}
 	return field
+}
+
+func (f Field) Resolution() float64 {
+	resolution := math.Inf(+1)
+	d := f.Data
+	for i:=0; i<len(f.Data)-1; i++ {
+		r := math.Abs(d[i] - d[i+1])
+		if r<resolution {
+			resolution = r
+		}
+	}
+	return resolution
 }

@@ -132,3 +132,23 @@ func (text GrobText) String() string {
 		text.x, text.y, text.text, Color2String(text.color),
 		180*text.angle/math.Pi, just, fnt)
 }
+
+// -------------------------------------------------------------------------
+// Grob Rect
+
+type GrobRect struct {
+	xmin, ymin float64
+	xmax, ymax float64
+	fill       color.Color
+}
+
+var _ Grob = GrobRect{}
+
+func (rect GrobRect) Draw(vp Viewport) {
+}
+
+func (rect GrobRect) String() string {
+	return fmt.Sprintf("Rect(%.3f,%.3f - %.3f,%.3f %s)",
+		rect.xmin, rect.ymin, rect.xmax, rect.ymax,
+		Color2String(rect.fill))
+}
