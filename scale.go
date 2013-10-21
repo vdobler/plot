@@ -10,6 +10,8 @@ import (
 // Scale provides position scales like x- and y-axis as well as color
 // or other scales.
 type Scale struct {
+	Name string // Name is used as the title in legends or as axis labels.
+
 	Discrete    bool
 	Time        bool
 	Aesthetic   string // pos (x/y), col/fill, size, type ... TODO: good like this?
@@ -47,9 +49,9 @@ type Scale struct {
 
 // NewScale sets up a new scale for the given aesthetic, suitable for
 // the given data in field.
-func NewScale(aesthetic string, field Field) *Scale {
+func NewScale(aesthetic string, name string, ft FieldType) *Scale {
 	scale := Scale{}
-	switch field.Type {
+	switch ft {
 	case Time:
 		scale.Time = true
 	case String:
@@ -233,11 +235,26 @@ func (s *Scale) PrepareContinous() {
 // raw [12,88] --log10--> [1.08,1.94] --break--> [1.2,1.4,1.6,1.8]
 // which gives [15.8, 25.1, 39.8, 63.1] wich is ugly. More
 // dramatic on sqrt or 1/x transforms.
-func (s *Scale) PrepareBreaks(min, max float64, num int) (float64, float64) {
+func (s *Scale) PrepareBreaks(min, max float64, num int) {
 	if s.Discrete || s.Time {
-		panic("Implement me")
+		panic("Shuld not happen")
 	}
 
+	if s.Time {
+		s.PrepareTimeBreaks(min, max, num)
+	} else {
+		s.PrepareContinousBreaks(min, max, num)
+	}
+}
+
+// TODO: Code below is suboptimal
+func (s *Scale) PrepareTimeBreaks(min, max float64, num int) {
+	s.Breaks = []float64{min, max, (min + max) / 2}
+}
+
+// PrepepareContinousBreaks automatically populates s.Breaks
+// with suitable values.
+func (s *Scale) PrepareContinousBreaks(min, max float64, num int) {
 	fullRange := max - min
 
 	// Decompose delta into the form delta = f * mag
@@ -269,7 +286,6 @@ func (s *Scale) PrepareBreaks(min, max float64, num int) (float64, float64) {
 		x += step
 	}
 
-	return step, mag
 }
 
 // PrepareLabels sets up s.Labels (if empty) by formating s.Breaks.

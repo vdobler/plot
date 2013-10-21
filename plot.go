@@ -148,7 +148,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 		// Add scale for these aesthetics if not jet set up.
 		if !ok {
 			// Add appropriate scale.
-			scale = NewScale(a, data.Columns[a])
+			scale = NewScale(a, aes[a], data.Columns[a].Type)
 			plot.Scales[a] = scale
 			println("Added new scale ", a)
 		} else {
