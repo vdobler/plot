@@ -48,14 +48,18 @@ Plot Creation is the following process:
       treated as its own plot and represented as a panel.
       Result: A n x m data frames in Domain Units, original field names
 
-  2a. Some or all fields are mapped to aestetics.
+  2a. Some or all fields are mapped to aesthetics.
+      Mapped fields are renamed to the aesthetic.
+      Unmapped fields are removed from the data frame.
+      Scales are added for the "known" aesthetics if not
+      jet present.
       The mapped fields are transformed according to the
       scale transformation (identitiy, log, sqrt, 1/x, ...)
+      
       Result: Data frame in Domain Units, unmapped fields have
-      original field names, other have the mapped aes name.
-      Only add "known" scales to the plot: During this stage
-      we might want to keep columns in the original data frame
-      so that the statistical transform can use these columns.
+      been removed, other have the mapped aes name and are
+      scale transformed
+
   2b. Pre-Train Scales. Usefull if upcumming stat wants to knows what
       the full x-range will be.
 
@@ -66,28 +70,32 @@ Plot Creation is the following process:
 
   4a. Some (typically new) fields might be mapped to (new) aestetics.
       Scale transformations are performed during this mapping.
+
   4b. Rename fields to match expected input from Geom in next step.
       Result: A data frame with field names suitable to be rendered
       as a specific Geom.
 
-  5a. Apply position adjustments to geoms located at the same x-coordinate.
-  5b. Reparametrise Geoms. E.g. change description of a rectangle
-      from <centerX, centerY, Width, Height> to (xmin,ymin, xmax,ymax).
-      Reperametrise complex or domain specific geoms to a few
-      basic, primitive geoms.
-      Result: One (TODO: or several?) data frames in Domain Units
-      with field names suitable for primitive geoms.
+  5a. Apply geom specific position adjustments.
 
-  6.  Train scales: Find min/max or set of levels accross layers and
-      facetts.
+  5b. Train scales.
 
-  7.  Uses these scales to render geoms into Grobs (Graphical Objects).
+  5c. Reparametrise Geoms to a set of fundamental geoms.
+      Result: One or several fundamantal geoms with their data frames
+      in Domain Units with field names suitable for primitive geoms.
+
+  6.  Prepare scales. Use learned domain in 5b to set up the needed
+      domain-to-aesthetics functions.
+
+  7.  Uses these scales to render the fundamental geoms produced in
+      step 5c into Grobs (Graphical Objects).
       Result: Structure of Grobs, coordinates/values in Range Units.
 
   8a. Apply Coordinate Transformations: Interprete <x,y> pairs in
       a Grob eg. as <y,x> (flip coordinates), as <r,ϑ> (polar coordiantes)
       or <x,-y> (reversed y) and so on.
-      Interpolate lines by lots of small segemnts.
+      Munching (interpolate lines by lots of small segments.) for
+      non-cartesian coordinates.
+
   8b. Render into Viewport.
 
   9.  Render Guides (Axes and Legends), render rest (title, facett boxes).
@@ -128,7 +136,9 @@ Gender is passed through pretty much unchanged while x is aggregated,
 here the center of the bins, i.e. none of the resulting x might occur
 in the input data frame.
 
-Statistical transforms cannot be chained.
+Statistical transforms cannot be chained. (Well not automatically:
+If data frame generation and applying a stat is exported the user could
+chain several stats manually.)
 
 
 Aesthetics Mapping
@@ -163,6 +173,51 @@ The ggplot2 way of doing this is by use of
 which is pretty straight forward for an interactive tool but does not
 fit well into a prepared plot with fixed layers, stats and geoms.
 
+It seem impossible in ggplot for R to plot geom_crossbar to a calculated
+stat_boxplot as the calculated middle cannot be wired to the required
+y value. The standard way in ggplot2 for R is to add either a stat or
+a geom but not both (maybe change the geom in the stat).  This won't
+work properly here.
+
+[[ 
+   Maybe stuff like plot.AddHistogram or plot.AddBoxplot which
+   adds suitable stat and geom in one step might be nice
+   convenience functions, maybe in a subpackage, once...
+]]
+
+
+Position Adjustments
+--------------------
+All four adjustments (dodge, jitter, stack and fill) work some geoms
+only in ggplot2 for R. Boxplots can use identity and dodge. Stacking (and
+filling) works properly only for geom_bar.  The ggplot for R code is a bit
+shaky here: It works hardwired on ymin and ymax so that stacking crossbars
+looses the the crossbar at the y value as this one is not moved...
+It kinda works for ggplot2 for R as the normal way is to add either a
+stat _or_ a geom, but not both.
+
+Conclusion: Original ggplot2 for R solution is not practical here.
+Solution: Make position adjustment a property of the individial
+geoms. Some geoms might not allow and position adjustments at all
+or just a subset.
+
+
+Geoms
+-----
+There are aa handfull of fundamental geoms, these correspond directly
+to grobs.  Other geoms might be simple reparametrizations of a fundamental
+grob: E.g. GeomTile, described by <x,y,width,height,fill,...> is just
+a different parametrization of a GeomRect of <xmin,ymin,xmax,ymax,fill...>.
+Other geoms can be represented by a set of other geoms, e.g. GeomBoxplot
+consists of GeomRects, GeomLines and GeomPoints. 
+
+Constructing geoms performs the following parts:
+  - Adjust positions (dodge, stack, ...).
+  - Compute "bounding boxes", e.g. a bar at x=1 might reach from.
+    0.25 to 1.75.
+  - Train scales with these bounding boxes.
+  - Emit fundamental geoms.
+
 
 Grobs, Graphical Objects
 ------------------------
@@ -188,8 +243,8 @@ Boxplot
 Maybe the most complex stuff. If this works everythings should be fine.
 
 Prerequisite:
-  - Some discrete field is mapped to x.
-  - Some field is mapped to y.
+  - One discrete field is mapped to x.
+  - One field is mapped to y.
   - Other fields may be mapped to color, fill, linetype
 
 Statistical transform:
@@ -213,6 +268,7 @@ Geom construction:
   - Produce a set of "Basic-Geoms" which biject to grobs and
     do not need a reparametrisation: Produce rectangle,
     vertical lines, horizontal median and outlier dots.
+  - Outlier dots could be read from the original DF?
     
 
 Grob construction:
@@ -220,3 +276,64 @@ Grob construction:
     functions.
   - Use projection functions to turn values in the different
     geoms to real grobs in viewport coordinates. 
+
+
+
+Example of Plot Construction
+----------------------------
+
+Step            Example A                          Example B                        Example C                        Example D
+°°°°            °°°°°°°°°                          °°°°°°°°°                        °°°°°°°°°                        °°°°°°°°°
+	      				       	                                                                  
+                x=Age, y=BMI, fill=Gender          x=Age, fill=Gender               x=Age, fill=Gender               x=Age, y=BMI, fill=Gender, linestyle=Smoker
+                Stat Identity                      Stat Bin                         Stat Bin                         Stat Boxplot             
+                Geom Point                         Geom Bar y=count                 Geom Bar y=density               Geom Boxplot
+                Position Identity                  Position Stack                   Position Fill                    Position Dodge      
+                LogScale on x
+              				       	                                                                  
+
+Prepare Data    rename field                       rename field                     rename field                     rename field
+°°°°°°°°°°°°      Age->x, BMI->y, Gender->fill       Age->x, Gender->fill             Age->x, Gender->fill             Age->x, BMI->y, Gender->fill, Smoker->linestyle
+                keep only the field                keep only the field              keep only the field              keep only the field
+                  x, y, fill                         x, fill                          x, fill                          x, y, fill, linestyle
+                set x <- log(x)
+	      				       	                                                                  
+	      				       	                                                                  
+Prepare Scale   (add Scale x), pretrain            add Scale x, pretrain            add Scale x, pretrain            add Scale x, pretrain
+°°°°°°°°°°°°°   add Scale y, pretrain                                                                                add Scale y, pretrain
+                add Scale fill, pretrain           add Scale fill, pretrain         add Scale fill, pretrain         add Scale fill, pretrain
+                                                                                                                     add Scale linestyle, pretrain
+                				       	                                                                  
+	      				       	                                                                  
+Stat Trans.     noop                               partition on fill                partition on fill                partition on fill
+°°°°°°°°°°°                                        per fill:                        per fill:                        per fill
+                                                      binify (x,count,density)         binify (x,count,density)         partition on linestyle				      
+                                                   combine to:                      combine to:                         per linestyle			      
+                                                      (x,count,density,fill)           (x,count,density,fill)              boxify (x,min,q1,med,q3,max)       	      
+	      				       					 				        combine to:			      
+                                                                                                                           (x,min,q1,med,q3,max, linestyle)   
+                                                                                                                     combine				      
+														        (x,min,q1,med,q3,max, linestyle, fill)
+
+	      				       	                                                                  
+Rewire          noop                               count->y, drop density           density->y, drop count           q1->low, q3->high
+°°°°°°                                             add Scale y                      add Scale y                      (add Scale y)
+
+
+Geom Constr     forach row in data:                foreach rows                     foreach rows                     foreach rows
+°°°°°°°°°°°       create one point (x,y,fill)        create bars (x,0,y,fill)         create bars (x,0,y,fill)         create box (x,width,min,...,max,ls,fill)
+                                                     if same x exists:                if same x exists:                if same x exists:
+                                                        raise to (x,a,a+y,fill)          raise to (x,a,a+y,fill)          move to (x+a, width/b,min,...,max,ls,fill)
+                train x,y,fill                     train x, y, fill                 foreach unique x:                train x,y,fill,ls
+                                                                                      rescale y-vals
+                                                                                    reset y-scale and retrain
+
+
+The oxboys example on grouping
+------------------------------
+Original DF with fields:
+  - Subject
+  - Height
+  - Age
+  - Occasion
+
