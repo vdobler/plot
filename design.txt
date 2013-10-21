@@ -148,6 +148,21 @@ What happens if one of the known real aesthetics is mapped:
   -  The scale is pre-trained: TODO: really here? not own phase?
 
 
+Complications, differences from ggplot2 for R
+---------------------------------------------
+All of the following do _not_ produce points for the calculated bins:
+  ggplot(diamonds, aes(x=x)) + stat_bin() + geom_point()
+  ggplot(diamonds, aes(x=x)) + stat_bin(aes(y=..count..)) + geom_point()
+  ggplot(diamonds, aes(x=x)) + stat_bin(aes(y=..count..)) + geom_point(count=count)
+  ggplot(diamonds, aes(x=x)) + stat_bin(aes(y=..count..)) + geom_point(y=..count..)
+  ggplot(diamonds, aes(x=x)) + stat_bin(aes(y=..count..)) + geom_point(y=count)
+  ggplot(diamonds, aes(x=x)) + stat_bin(aes(y=..count..)) + geom_point(y=count)
+  ... and so on.
+The ggplot2 way of doing this is by use of
+  ggplot(diamonds, aes(x=x)) + stat_bin(aes(y=..count..), geom="point")
+which is pretty straight forward for an interactive tool but does not
+fit well into a prepared plot with fixed layers, stats and geoms.
+
 
 Grobs, Graphical Objects
 ------------------------
@@ -167,3 +182,41 @@ Polygon but may be convenient...
 
 
 
+Boxplot
+-------
+
+Maybe the most complex stuff. If this works everythings should be fine.
+
+Prerequisite:
+  - Some discrete field is mapped to x.
+  - Some field is mapped to y.
+  - Other fields may be mapped to color, fill, linetype
+
+Statistical transform:
+  - Partition input data by color, fill and linetype. 
+  - For each partition:
+      * Group on the discrete x values
+      * For each group compute min, low, med, high, max
+        (and the outliers) based on the set of ys.
+      * Return DF with (x, min,q1,median,q3,max)
+  - Combine partitions to single DF which might look like
+    (x, min,q1,median,q3,max, color, linetype)
+
+Geom construction:
+  - Wire generated stat fields to geom input fields, e.g.
+    rename q1-->low, median-->mid, q3-->high
+  - For same-x entries in the DF: Apply position adjustments.
+    The only sane here is dodging, but nevertheless, why not
+    stack them....
+  - While building the geom: Train the scales, especially
+    the y scale.
+  - Produce a set of "Basic-Geoms" which biject to grobs and
+    do not need a reparametrisation: Produce rectangle,
+    vertical lines, horizontal median and outlier dots.
+    
+
+Grob construction:
+  - All scales should be trained now, prepare projection
+    functions.
+  - Use projection functions to turn values in the different
+    geoms to real grobs in viewport coordinates. 
