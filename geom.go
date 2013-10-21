@@ -426,12 +426,6 @@ func (r GeomRect) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
 	xmax, ymax := data.Columns["xmax"].Data, data.Columns["ymax"].Data
 	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
 
-	/***********
-	fmt.Printf("xmin: %+v\n", xmin)
-	fmt.Printf("ymin: %+v\n", ymin)
-	fmt.Printf("ymax: %+v\n", ymax)
-	fmt.Printf("yscale domain  %.2f  -- %.2f\n", plot.Scales["y"].DomainMin, plot.Scales["y"].DomainMax)
-        ************/
 	colFunc := makeColorFunc("color", data, plot, style)
 	fillFunc := makeColorFunc("fill", data, plot, style)
 	linetypeFunc := makeStyleFunc("linetype", data, plot, style)
