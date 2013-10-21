@@ -12,28 +12,28 @@ import (
 type Scale struct {
 	Name string // Name is used as the title in legends or as axis labels.
 
-	Discrete    bool
-	Time        bool
-	Aesthetic   string // pos (x/y), col/fill, size, type ... TODO: good like this?
-	ExpandToTic bool
+	Discrete bool
+	Time     bool
 
-	// Range of the Domain, as [DomainMin,DomainMax] interval for
-	// continuous scales or as a set DomainLevels of values.
-	// These values are populated during the trainings.
-	DomainMin    float64
-	DomainMax    float64
-	DomainLevels FloatSet
+	// pos (x/y), col/fill, size, type ... TODO: good like this?
+	Aesthetic string // should be same like the map key in Plot.Scales
+
+	// Transformation of values and guides.
+	Transform *ScaleTransform
 
 	// The Fix... fields can be used to manually set the domain
-	// of this scale to fixed values. Must be different/non-empty.
+	// of this scale to fixed values. FixLevels is used for discrete
+	// scales and FixMin/Max are used for continuous scales.
+	// A empty FixLevels or FixMin==FixMax results in an automatical
+	// determination of the domain of this scale based on the data
+	// plotted. Otherwise if FixMin!=FixMax the given values are
+	// used.
 	FixMin    float64
 	FixMax    float64
 	FixLevels FloatSet
 
-	// Transformation of values and guids.
-	Transform *ScaleTransform
-
-	// All following fields are set in Prepare.
+	// Relative and absolute expansion of scale.
+	ExpandRel, ExpandAbs float64
 
 	// Breaks controls the position of the tics. Empty: auto
 	Breaks []float64
@@ -41,7 +41,19 @@ type Scale struct {
 	// Labels are the labels for the tics. Empty: print Breaks
 	Labels []string
 
-	// Set up later after real training
+	// Empirical range of the Domain, as [DomainMin,DomainMax] interval
+	// for  continuous scales or as a set DomainLevels of values.
+	// These values are populated during the trainings.
+	DomainMin    float64
+	DomainMax    float64
+	DomainLevels FloatSet
+
+	// The actual min and max (continuous scales) or levels (discrete)
+	// used for this scale.
+	Min, Max float64
+	Levels   FloatSet
+
+	// All following fields are set in Prepare.
 	Color func(x float64) color.Color // color, fill. Any color
 	Pos   func(x float64) float64     // x, y, size, alpha. In [0,1]
 	Style func(x float64) int         // point and line type. Range ???
@@ -63,6 +75,9 @@ func NewScale(aesthetic string, name string, ft FieldType) *Scale {
 	scale.DomainLevels = NewFloatSet()
 
 	scale.Transform = &IdentityScale
+
+	scale.ExpandRel = 0.05
+	scale.ExpandAbs = 0.0
 
 	return &scale
 }
@@ -184,25 +199,25 @@ func (s *Scale) PrepareDiscrete() {
 
 // TODO: Scale needs access to data frame field to print string values
 func (s *Scale) PrepareContinous() {
-	min, max := s.DomainMin, s.DomainMax
+	s.Min, s.Max = s.DomainMin, s.DomainMax
 	if s.FixMin != s.FixMax {
-		min, max = s.FixMin, s.FixMax
+		s.Min, s.Max = s.FixMin, s.FixMax
 	}
-	expand := (max - min) * 0.05
-	min -= expand
-	max += expand
-	fullRange := max - min
+	expand := (s.Max-s.Min)*s.ExpandRel + s.ExpandAbs
+	s.Min -= expand
+	s.Max += expand
+	fullRange := s.Max - s.Min
 
 	// Set up breaks and labels
 	if len(s.Breaks) == 0 {
 		// All auto.
-		s.PrepareBreaks(min, max, 5)
+		s.PrepareBreaks(s.Min, s.Max, 5)
 	}
 	s.PrepareLabels()
 
 	// Produce mapping functions
 	s.Pos = func(x float64) float64 {
-		return (x - min) / fullRange
+		return (x - s.Min) / fullRange
 	}
 	s.Color = func(x float64) color.Color {
 		c := s.Pos(x)
