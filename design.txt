@@ -45,7 +45,7 @@ Plot Creation is the following process:
   
   1.  Split data according to facetting specification.
       Happens only on facetted plots, each facett is basically
-      treated as its own plot.
+      treated as its own plot and represented as a panel.
       Result: A n x m data frames in Domain Units, original field names
 
   2a. Some or all fields are mapped to aestetics.

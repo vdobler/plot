@@ -17,17 +17,22 @@ type Stat interface {
 
 	Apply(data *DataFrame, plot *Plot) *DataFrame
 
+	Info() StatInfo
+}
+
+// StatInfo contains information about how a stat can be used.
+type StatInfo struct {
 	// NeededAes are the aestetics which must be present in the
 	// data frame. If not all needed aestetics are mapped this
 	// statistics cannot be applied.
-	NeededAes() []string
+	NeededAes []string
 
 	// OptionalAes are the aestetocs which are used by this
 	// statistics if present, but it is no error if they are
 	// not mapped.
-	OptionalAes() []string
+	OptionalAes []string
 
-	ExtraFieldHandling() ExtraFieldHandling
+	ExtraFieldHandling ExtraFieldHandling
 }
 
 type ExtraFieldHandling int
@@ -49,10 +54,15 @@ type StatBin struct {
 
 var _ Stat = StatBin{}
 
-func (StatBin) Name() string                           { return "StatBin" }
-func (StatBin) NeededAes() []string                    { return []string{"x"} }
-func (StatBin) OptionalAes() []string                  { return []string{"weight"} }
-func (StatBin) ExtraFieldHandling() ExtraFieldHandling { return GroupOnExtraFields }
+func (StatBin) Name() string { return "StatBin" }
+
+func (StatBin) Info() StatInfo {
+	return StatInfo{
+		NeededAes:          []string{"x"},
+		OptionalAes:        []string{"weight"},
+		ExtraFieldHandling: GroupOnExtraFields,
+	}
+}
 
 func (s StatBin) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	if data == nil {
@@ -79,7 +89,6 @@ func (s StatBin) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	x2bin := func(x float64) int { return int((x - origin) / binWidth) }
 	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 }
 
-	println("StatBin.Apply: binWidth =", binWidth, "   numBins =", numBins)
 	counts := make([]int64, numBins+1) // TODO: Buggy here?
 	column := data.Columns["x"].Data
 	maxcount := int64(0)
@@ -157,10 +166,15 @@ type StatLinReq struct {
 
 var _ Stat = &StatLinReq{}
 
-func (StatLinReq) Name() string                           { return "StatLinReq" }
-func (StatLinReq) NeededAes() []string                    { return []string{"x", "y"} }
-func (StatLinReq) OptionalAes() []string                  { return []string{"weight"} }
-func (StatLinReq) ExtraFieldHandling() ExtraFieldHandling { return GroupOnExtraFields }
+func (StatLinReq) Name() string { return "StatLinReq" }
+
+func (StatLinReq) Info() StatInfo {
+	return StatInfo{
+		NeededAes:          []string{"x", "y"},
+		OptionalAes:        []string{"weight"},
+		ExtraFieldHandling: GroupOnExtraFields,
+	}
+}
 
 func (s *StatLinReq) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	if data == nil {
@@ -218,10 +232,15 @@ type StatSmooth struct {
 
 var _ Stat = &StatSmooth{}
 
-func (StatSmooth) Name() string                           { return "StatSmooth" }
-func (StatSmooth) NeededAes() []string                    { return []string{"x", "y"} }
-func (StatSmooth) OptionalAes() []string                  { return []string{"weight"} }
-func (StatSmooth) ExtraFieldHandling() ExtraFieldHandling { return GroupOnExtraFields }
+func (StatSmooth) Name() string { return "StatSmooth" }
+
+func (StatSmooth) Info() StatInfo {
+	return StatInfo{
+		NeededAes:          []string{"x", "y"},
+		OptionalAes:        []string{"weight"},
+		ExtraFieldHandling: GroupOnExtraFields,
+	}
+}
 
 func (s *StatSmooth) Apply(data *DataFrame, plot *Plot) *DataFrame {
 	if data == nil {
@@ -282,13 +301,17 @@ type StatLabel struct {
 
 var _ Stat = StatLabel{}
 
-func (StatLabel) Name() string                           { return "StatLabel" }
-func (StatLabel) NeededAes() []string                    { return []string{"x", "y", "value"} }
-func (StatLabel) OptionalAes() []string                  { return []string{"color"} }
-func (StatLabel) ExtraFieldHandling() ExtraFieldHandling { return IgnoreExtraFields }
+func (StatLabel) Name() string { return "StatLabel" }
+
+func (StatLabel) Info() StatInfo {
+	return StatInfo{
+		NeededAes:          []string{"x", "y", "value"},
+		OptionalAes:        []string{"color"},
+		ExtraFieldHandling: IgnoreExtraFields,
+	}
+}
 
 func (s StatLabel) Apply(data *DataFrame, plot *Plot) *DataFrame {
-	println("==============\nStatLabel.Apply\n=============")
 	result := NewDataFrame(fmt.Sprintf("labeling %s", data.Name))
 	result.N = data.N
 	textf := NewField(result.N)

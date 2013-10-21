@@ -172,7 +172,7 @@ func TestIndividualSteps(t *testing.T) {
 		data.Columns["slope"].Data[0])
 	// StatLabels produces labels
 	if fields := plot.Layers[2].Data.FieldNames(); !same(fields, []string{"x", "y", "text"}) {
-		t.Errorf("Layer 2 DF has fields %v", fields)
+		t.Errorf("Layer 2 %q has fields %v",  plot.Layers[3].Name, fields)
 	}
 	data = plot.Layers[2].Data
 	if data.N != 20 {
@@ -181,7 +181,7 @@ func TestIndividualSteps(t *testing.T) {
 
 	// StatBin produces bins
 	if fields := plot.Layers[3].Data.FieldNames(); !same(fields, []string{"x", "count", "ncount", "density", "ndensity"}) {
-		t.Errorf("Layer 3 DF has fields %v", fields)
+		t.Errorf("Layer 3 %q has fields %v", plot.Layers[3].Name, fields)
 	}
 	data = plot.Layers[3].Data
 	if data.N != 11 {
