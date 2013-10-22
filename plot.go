@@ -13,6 +13,7 @@ var now = time.Now
 var col = color.RGBA{}
 var floor = math.Floor
 
+// Plot represents a whole plot.
 type Plot struct {
 	// Data is the data to draw.
 	Data *DataFrame
@@ -20,7 +21,7 @@ type Plot struct {
 	// Faceting describes the Used Faceting
 	Faceting Faceting
 
-	// Mapping describes how fileds in data are mapped to Aesthetics
+	// Mapping describes how fieleds in data are mapped to Aesthetics.
 	Aes AesMapping
 
 	// Layers contains all the layers displayed in the plot.
@@ -34,8 +35,7 @@ type Plot struct {
 	Theme Theme
 }
 
-// Layer represents one layer of data
-//
+// Layer represents one layer of data in a plot.
 type Layer struct {
 	Plot *Plot
 	Name string
@@ -65,6 +65,35 @@ type Layer struct {
 	GeomMapping AesMapping
 
 	Grobs []Grob
+}
+
+// A Panel is one panel, typically in a facetted plot.
+type Panel struct {
+	Data *DataFrame
+
+	RowName string
+	ColName string
+
+	// Plot is the plot this panel belongs to
+	Plot *Plot
+
+	Layers []*Layer
+}
+
+// Facetting describes the facetting to use. The zero value indicates
+// no facetting.
+type Faceting struct {
+	// Columns and Rows are the faceting specification. Each may be a comma
+	// seperated list of fields in the Data. An empty string means no
+	// faceting in this dimension.
+	Columns, Rows string
+
+	// Totals controlls display of totals.
+	Totals bool // TODO: fancier control needed
+
+	FreeScale string // "": fixed, "x": x is free, "y": y is free, "xy": both are free
+
+	FreeSpace string // as FreeScale but for width and height of panels
 }
 
 type Fundamental struct {
@@ -552,32 +581,6 @@ func (p *Plot) ComputeStatistics() {
 	}
 }
 */
-
-type Panel struct {
-	Data *DataFrame
-
-	RowName string
-	ColName string
-
-	// Plot is the plot this panel belongs to
-	Plot *Plot
-
-	Layers []*Layer
-}
-
-type Faceting struct {
-	// Columns and Rows are the faceting specification. Each may be a comma
-	// seperated list of fields in the Data. An empty string means no
-	// faceting in this dimension.
-	Columns, Rows string
-
-	// Totals controlls display of totals.
-	Totals bool // TODO: fancier control needed
-
-	FreeScale string // "": fixed, "x": x is free, "y": y is free, "xy": both are free
-
-	FreeSpace string // as FreeScale but for size of panel
-}
 
 func UniqueStrings(s []string) (u []string) {
 	if len(s) <= 1 {
