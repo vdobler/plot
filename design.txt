@@ -48,21 +48,35 @@ Plot Creation is the following process:
       treated as its own plot and represented as a panel.
       Result: A n x m data frames in Domain Units, original field names
 
+
+  2.  Prepare Data
+
   2a. Some or all fields are mapped to aesthetics.
       Mapped fields are renamed to the aesthetic.
       Unmapped fields are removed from the data frame.
-      Scales are added for the "known" aesthetics if not
-      jet present.
-      The mapped fields are transformed according to the
-      scale transformation (identitiy, log, sqrt, 1/x, ...)
       
       Result: Data frame in Domain Units, unmapped fields have
       been removed, other have the mapped aes name and are
       scale transformed
 
-  2b. Pre-Train Scales. Usefull if upcumming stat wants to knows what
+  2b. Scales are added for the "known" aesthetics if not
+      jet present.
+      The mapped fields are transformed according to the
+      scale transformation (identitiy, log, sqrt, 1/x, ...)
+      Pre-Train Scales. Usefull if upcumming stat wants to knows what
       the full x-range will be.
 
+
+  3.  Statistical transformation
+
+  3a. It is checked that the statistical transform can be
+      applied to the given data frame
+
+  3b. The data frame is partitioned on any additional discrete
+      fields.
+      The stat transform is applied to each partition.
+      The partitions are joined to produce a result.
+  
   3.  A statistical transform is applied, typically some kind of
       summary statistics like binning, boxplot or smoothing.
       Result: A completely new data frame with new field names.

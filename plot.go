@@ -104,8 +104,12 @@ func same(s []string, t []string) bool {
 //     ScaleTransform associated with x, y, size, ....
 //
 // TODO: how about grouping? 69b0d2b contains grouping code.
+//
+// Step 2 in design.
 func (p *Plot) PrepareData() {
 	for _, layer := range p.Layers {
+		// Step 2a
+
 		// Set up data and aestetics mapping.
 		if layer.Data == nil {
 			layer.Data = layer.Plot.Data.Copy()
@@ -126,6 +130,7 @@ func (p *Plot) PrepareData() {
 			layer.Data.Rename(f, a)
 		}
 
+		// Step 2b
 		layer.Plot.PrepareScales(layer.Data, aes)
 	}
 }
@@ -133,6 +138,10 @@ func (p *Plot) PrepareData() {
 // PrepareScales makes sure plot contains all sclaes needed for the
 // aesthetics in aes, the data is scale transformed if requested by the
 // scale and the scales are pre-trained.
+//
+// Only continuous, non-time-scales can be transformed.
+//
+// Step 2b
 func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 	scaleable := map[string]bool{
 		"x":        true,
@@ -148,7 +157,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 	for a := range aes {
 		println("PrepareScales working on ", a)
 		if !scaleable[a] {
-			println("Un-scalable scale ", a)
+			println("  Un-scalable scale ", a)
 			continue
 		}
 
@@ -159,19 +168,25 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			// Add appropriate scale.
 			scale = NewScale(a, aes[a], data.Columns[a].Type)
 			plot.Scales[a] = scale
-			println("Added new scale ", a)
+			println("  Added new scale ", a)
 		} else {
-			println("Scale ", a, " exists with name ", scale.Aesthetic)
+			println("  Scale ", a, " exists %q ", scale.Name)
 		}
 
 		// Transform scales if needed.
-		if scale.Transform != nil {
-			field := data.Columns[a]
-			field.Apply(scale.Transform.Trans)
-			println("Transform data on scale ", a)
+		if scale.Transform != nil && scale.Transform != &IdentityScale {
+			if scale.Discrete || scale.Time {
+				plot.Warnf("Cannot transform discrete or time scale %s %q",
+					scale.Aesthetic, scale.Name)
+				scale.Transform = &IdentityScale
+			} else {
+				field := data.Columns[a]
+				field.Apply(scale.Transform.Trans)
+				println("  Transformed data on scale ", a)
+			}
 		}
 		// Pre-train scales
-		println("Pretraining ", a, " ", scale.Aesthetic)
+		println("  Pretraining ", a, " ", scale.Aesthetic)
 		scale.Train(data.Columns[a])
 	}
 
