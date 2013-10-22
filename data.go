@@ -59,14 +59,20 @@ func NewField(n int) Field {
 }
 
 func (f Field) Copy() Field {
+	c := f.CopyMeta()
+	c.Data = make([]float64, len(f.Data))
+	copy(c.Data, f.Data)
+	return c
+}
+
+func (f Field) CopyMeta() Field {
 	c := Field{
 		Type:   f.Type,
 		Origin: f.Origin,
 		Str:    make([]string, len(f.Str)),
-		Data:   make([]float64, len(f.Data)),
+		Data:   nil,
 	}
 	copy(c.Str, f.Str)
-	copy(c.Data, f.Data)
 	return c
 }
 
@@ -113,6 +119,15 @@ func (df *DataFrame) Copy() *DataFrame {
 	return result
 }
 
+func (df *DataFrame) CopyMeta() *DataFrame {
+	result := NewDataFrame(df.Name + "_metacopy")
+	for name, field := range df.Columns {
+		result.Columns[name] = field.CopyMeta()
+	}
+	result.N = 0
+	return result
+}
+
 func (df *DataFrame) Rename(o, n string) {
 	if o == n {
 		return
@@ -125,7 +140,6 @@ func (df *DataFrame) Rename(o, n string) {
 func (df *DataFrame) Delete(fn string) {
 	delete(df.Columns, fn)
 }
-
 
 func (df *DataFrame) Apply(field string, f func(float64) float64) {
 	if df.Columns[field].Type == String {
@@ -577,11 +591,38 @@ func GroupingField(data *DataFrame, names []string) Field {
 func (f Field) Resolution() float64 {
 	resolution := math.Inf(+1)
 	d := f.Data
-	for i:=0; i<len(f.Data)-1; i++ {
+	for i := 0; i < len(f.Data)-1; i++ {
 		r := math.Abs(d[i] - d[i+1])
-		if r<resolution {
+		if r < resolution {
 			resolution = r
 		}
 	}
 	return resolution
+}
+
+// Partition df.
+func Partition(df *DataFrame, field string, levels []float64) []*DataFrame {
+	part := make([]*DataFrame, len(levels))
+	idx := make(map[float64]int)
+	for i, level := range levels {
+		part[i] = df.CopyMeta()
+		part[i].Delete(field)
+		idx[level] = i
+	}
+
+	fc := df.Columns[field].Data
+	for j := 0; j < df.N; j++ {
+		level := fc[j]
+		i := idx[level]
+		for name, f := range df.Columns {
+			if name == field {
+				continue
+			}
+			t := part[i].Columns[name]
+			t.Data = append(t.Data, f.Data[j])
+			part[i].Columns[name] = t
+		}
+	}
+
+	return part
 }

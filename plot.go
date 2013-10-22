@@ -54,16 +54,22 @@ type Layer struct {
 	// aesthetics with StatMapping
 	StatMapping AesMapping
 
-	// Geom is the geom to use for this layer
+	// Geom is the geom to use for this layer.
 	Geom Geom
+
+	// The fundamental geoms to draw.
+	Fundamentals []Fundamental
 
 	// GeomMapping is used to wire fields output by the statistical
 	// transform to the input fields used by the geom.
 	GeomMapping AesMapping
 
-	Position PositionAdjust
-
 	Grobs []Grob
+}
+
+type Fundamental struct {
+	Geom Geom
+	Data *DataFrame
 }
 
 func (p *Plot) Warnf(f string, args ...interface{}) {
@@ -93,6 +99,9 @@ func same(s []string, t []string) bool {
 	}
 	return true
 }
+
+// -------------------------------------------------------------------------
+// Step 2: Preparing Data and Scales
 
 // PrepareData is the first step in generating a plot.
 // After preparing the data frame the following holds
@@ -192,7 +201,18 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 
 }
 
+// -------------------------------------------------------------------------
+// Step 3: Satistical Transformation
+
+func (p *Plot) ComputeStatistics() {
+	for _, layer := range p.Layers {
+		layer.ComputeStatistics()
+	}
+}
+
 // ComputeStatistics computes the statistical transform. Might be the identity.
+//
+// Step 3 in design.
 func (layer *Layer) ComputeStatistics() {
 	if layer.Stat == nil {
 		return // The identity statistical transformation.
@@ -200,6 +220,7 @@ func (layer *Layer) ComputeStatistics() {
 
 	// Make sure all needed aesthetics (columns) are present in
 	// our data frame.
+	// Step 3a.
 	needed := layer.Stat.Info().NeededAes
 	for _, aes := range needed {
 		if _, ok := layer.Data.Columns[aes]; !ok {
@@ -214,23 +235,15 @@ func (layer *Layer) ComputeStatistics() {
 	// Handling of excess fields. TODO: Massive refactoring needed.
 	usedByStat := NewStringSetFrom(needed)
 	usedByStat.Join(NewStringSetFrom(layer.Stat.Info().OptionalAes))
-	fields := NewStringSetFrom(layer.Data.FieldNames())
-	fields.Remove(usedByStat)
-	handling := layer.Stat.Info().ExtraFieldHandling
-	if len(fields) == 0 || handling == IgnoreExtraFields {
-		fmt.Printf(">>> %q: Short path %v\n", layer.Stat.Name(), layer.Data.FieldNames())
-		layer.Data = layer.Stat.Apply(layer.Data, layer.Plot)
-		fmt.Printf(">>> after %v\n", layer.Data.FieldNames())
-	} else {
-		if handling == FailOnExtraFields {
-			layer.Plot.Warnf("Stat %s in Layer %s cannot cope with excess fields %v",
-				layer.Stat.Name(), layer.Name, fields.Elements())
-			// TODO: more cleanup?
-			layer.Geom = nil // Don't draw anything.
-			return
-		}
+	additionalFields := NewStringSetFrom(layer.Data.FieldNames())
+	additionalFields.Remove(usedByStat)
 
-		// Else, make sure all excess fields are discrete.
+	// TODO: all handling related code
+	/***********************************************************
+		handling := layer.Stat.Info().ExtraFieldHandling
+
+		// Make sure all excess fields are discrete and abort on
+		// any continuous field.
 		for _, f := range fields.Elements() {
 			if !layer.Data.Columns[f].Discrete() {
 				layer.Plot.Warnf("Stat %s in Layer %s cannot cope with continous excess fields %s",
@@ -240,112 +253,147 @@ func (layer *Layer) ComputeStatistics() {
 				return
 			}
 		}
+	        *************************************************************/
 
-		if len(fields) > 1 {
-			panic("Implement me")
-		}
-		ef := fields.Elements()[0]
-		f := layer.Data.Columns[ef]
-		levels := Levels(layer.Data, ef)
-		for i, level := range levels.Elements() {
-			df := Filter(layer.Data, ef, level)
-			delete(df.Columns, ef)
-			res := layer.Stat.Apply(df, layer.Plot)
-			res.Columns[ef] = f.Const(level, res.N)
-			if i == 0 {
-				layer.Data = res
-			} else {
-				layer.Data.Append(res)
-			}
-		}
+	// Do the transform recursively. Step 3b
+	layer.Data = applyRec(layer.Data, layer.Stat, layer.Plot, additionalFields.Elements())
 
+}
+
+// Recursively partition data on the the additional fields, apply stat and
+// combine the result.
+func applyRec(data *DataFrame, stat Stat, p *Plot, additionalFields []string) *DataFrame {
+	if len(additionalFields) == 0 {
+		return stat.Apply(data, p)
 	}
 
+	field := additionalFields[0]
+	var result *DataFrame
+	levels := Levels(data, field).Elements()
+	partition := Partition(data, field, levels)
+	for i, part := range partition {
+		// Recursion
+		part = applyRec(part, stat, p, additionalFields[1:])
+
+		// Re-add the field which was stripped during partitioning.
+		af := data.Columns[field].Const(levels[i], part.N)
+		part.Columns[field] = af
+
+		// Combine results.
+		if i == 0 {
+			result = part
+		} else {
+			result.Append(part)
+		}
+	}
+	return result
+}
+
+// -------------------------------------------------------------------------
+// Step 4: Wiring Result of Stat to Input of Geom
+
+func (p *Plot) WireStatToGeom() {
+	for _, layer := range p.Layers {
+		layer.WireStatToGeom()
+	}
+}
+
+func (layer *Layer) WireStatToGeom() {
 	// Now we have a new data frame with possible new columns.
 	// These may be mapped to plot aestetics by plot.StatMapping.
 	// Do this now.
-	if len(layer.StatMapping) == 0 {
-		return
-		// TODO: this also misses training the scales...
+	if len(layer.StatMapping) != 0 {
+		fmt.Printf("Layer %s: preparing scales with stat mapping %v\n",
+			layer.Name, layer.StatMapping)
+
+		// Rename mapped fields to their aestethic name
+		for a, f := range layer.StatMapping {
+			layer.Data.Rename(f, a)
+			println("Renaming ", f, " to ", a, " because of stat mapping.")
+		}
+		layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
 	}
 
-	fmt.Printf("Layer %s: preparing scales with stat mapping %v\n",
-		layer.Name, layer.StatMapping)
+	// TODO: Geoms should contain aesthetict only as input, so there
+	// should not be a need for both, StatMapping and GeomMapping, or?
 
-	// Rename mapped fields to their aestethic name
-	for a, f := range layer.StatMapping {
-		layer.Data.Rename(f, a)
-		println("Renaming ", f, " to ", a, " because of stat mapping.")
+	// Rename fields produces by statistical transform to names
+	// the geom understands.
+	// TODO: When to set e.g. color to a certain value?
+	for aes, field := range layer.GeomMapping {
+		layer.Data.Rename(field, aes)
 	}
-	layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
+
 }
 
-func (p *Plot) ComputeStatistics() {
-	for _, layer := range p.Layers {
-		layer.ComputeStatistics()
-	}
-}
+// -------------------------------------------------------------------------
+// Step 5: Constructing Geoms
 
 // ConstructGeoms sets up the geoms so that they can be rendered. This includes
 // an optional renaming of stat-generated fields to geom-understandable fields,
 // applying positional adjustment to same-x geoms and reparametrization to
 // fundamental geoms.
 //
-// TODO: Should 5a and 5b be exchanged?
 func (p *Plot) ConstructGeoms() {
 	for _, layer := range p.Layers {
-		if layer.Geom == nil {
-			layer.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
-			return
-		}
-
-		// Rename fields produces by statistical transform to names
-		// the geom understands. (Step 4b.)
-		// TODO: When to set e.g. color to a certain value?
-		for aes, field := range layer.GeomMapping {
-			layer.Data.Rename(field, aes)
-		}
-
-		// Make sure all needed slots are present in the data frame
-		slots := NewStringSetFrom(layer.Geom.NeededSlots())
-		dfSlots := NewStringSetFrom(layer.Data.FieldNames())
-		slots.Remove(dfSlots)
-		if len(slots) > 0 {
-			layer.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
-				layer.Geom.Name(), layer.Name, slots.Elements())
-			layer.Geom = nil
-			return
-		}
-
-		// (Step 5a)
-		layer.Geom.AdjustPosition(layer.Data, layer.Position)
-
-		// (Step 5b)
-		layer.Geom = layer.Geom.Reparametrize(layer.Data)
+		layer.ConstructGeoms()
 	}
 }
 
-func (p *Plot) RetrainScales() {
-	for aes, scale := range p.Scales {
-		for _, layer := range p.Layers {
-			if layer.Geom == nil {
-				println("Retrain scale: No geom on layer ", layer.Name)
-			}
+func (layer *Layer) ConstructGeoms() {
+	if layer.Geom == nil {
+		layer.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
+		return
+	}
 
-			scale.Retrain(aes, layer.Geom, layer.Data)
-		}
-		scale.Prepare()
+	// Make sure all needed slots are present in the data frame
+	slots := NewStringSetFrom(layer.Geom.NeededSlots())
+	dfSlots := NewStringSetFrom(layer.Data.FieldNames())
+	slots.Remove(dfSlots)
+	if len(slots) > 0 {
+		layer.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
+			layer.Geom.Name(), layer.Name, slots.Elements())
+		layer.Geom = nil
+		return
+	}
+
+	layer.Fundamentals = layer.Geom.Construct(layer.Data, layer.Plot)
+}
+
+// -------------------------------------------------------------------------
+// Step 6: Prepare Scales
+func (p *Plot) FinalizeScales() {
+	for _, scale := range p.Scales {
+		scale.Finalize()
 	}
 }
+
+// -------------------------------------------------------------------------
+// Step 7: Render fundamental Geoms
 
 func (p *Plot) RenderGeoms() {
 	for _, layer := range p.Layers {
-		if layer.Geom != nil {
-			data := layer.Data
-			aes := layer.Geom.Aes(p)
-			layer.Grobs = layer.Geom.Render(p, data, aes)
+		if len(layer.Fundamentals) == 0 {
+			continue
+		}
+		for _, fund := range layer.Fundamentals {
+			data := fund.Data
+			aes := fund.Geom.Aes(p)
+			layer.Grobs = append(layer.Grobs, fund.Geom.Render(p, data, aes)...)
 		}
 	}
+}
+
+// -------------------------------------------------------------------------
+// Step 8: Render remaining parts of plot
+
+func (p *Plot) RenderVisuals() {
+}
+
+// -------------------------------------------------------------------------
+// Step 9: Ouutput
+
+func (p *Plot) Output() {
 }
 
 // Unfacetted plotting, Layers have no own data.
@@ -358,24 +406,41 @@ func (p *Plot) Simple() {
 
 	// Prepare data: map aestetics, add scales, clean data frame and
 	// apply scale transformations. Mapped scales are pre-trained.
-	// (Steps 2a and 2b in design.)
+	// Step 2
 	p.PrepareData()
 
 	// The second step: Compute statistics.
 	// If a layer has a statistical transform: Apply this transformation
 	// to the data frame of this layer.
-	// (Step 3 and 4a in design)
+	// Step 3
 	p.ComputeStatistics()
 
+	// Make sure the output of the stat matches the input expected
+	// by the geom.
+	// Step 4
+	p.WireStatToGeom()
+
 	// Construct geoms
-	// (Step 4b, 5a and 5b in design)
+	// Apply geom specific position adjustments, train the involved
+	// scales and produce a set of fundamental geoms.
+	// Step 5
 	p.ConstructGeoms()
 
-	// Retrain scales. (Step 6)
-	p.RetrainScales()
+	// Finalize scales: Setup remaining fields.
+	// Step 6
+	p.FinalizeScales()
 
-	// Render Geoms to Grobs using scales (Step7).
+	// Render the fundamental Geoms to Grobs using scales.
+	// Step 7
 	p.RenderGeoms()
+
+	// Render rest of elements (guides, titels, factting, ...)
+	// Step 8
+	p.RenderVisuals()
+
+	// Have each grob be pixeled into output.
+	// Step 9
+	p.Output()
 }
 
 func (p *Plot) Draw() {

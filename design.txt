@@ -50,7 +50,7 @@ Plot Creation is the following process:
 
 
   2.  Prepare Data
-
+      ▔▔▔▔▔▔▔▔▔▔▔
   2a. Some or all fields are mapped to aesthetics.
       Mapped fields are renamed to the aesthetic.
       Unmapped fields are removed from the data frame.
@@ -68,7 +68,7 @@ Plot Creation is the following process:
 
 
   3.  Statistical transformation
-
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
   3a. It is checked that the statistical transform can be
       applied to the given data frame
 
@@ -82,6 +82,9 @@ Plot Creation is the following process:
       Result: A completely new data frame with new field names.
       (Or the original input if no stat is requested.)
 
+
+  4.  Wiring stat to geom
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
   4a. Some (typically new) fields might be mapped to (new) aestetics.
       Scale transformations are performed during this mapping.
 
@@ -89,6 +92,9 @@ Plot Creation is the following process:
       Result: A data frame with field names suitable to be rendered
       as a specific Geom.
 
+
+  5.  Geom construction
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
   5a. Apply geom specific position adjustments.
 
   5b. Train scales.
@@ -97,22 +103,36 @@ Plot Creation is the following process:
       Result: One or several fundamantal geoms with their data frames
       in Domain Units with field names suitable for primitive geoms.
 
-  6.  Prepare scales. Use learned domain in 5b to set up the needed
-      domain-to-aesthetics functions.
+  6.  Prepare scales
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔
+      Set up the remaining fields in each scale so that the scales
+      can be used.
 
-  7.  Uses these scales to render the fundamental geoms produced in
+  7.  Render fundamental geoms
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+      Uses these scales to render the fundamental geoms produced in
       step 5c into Grobs (Graphical Objects).
       Result: Structure of Grobs, coordinates/values in Range Units.
 
-  8a. Apply Coordinate Transformations: Interprete <x,y> pairs in
+  8   Render rest of plot
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+  8a. Render Guides (Axes and Legends)
+
+  8b. Render title, facett boxes.
+ 
+  8c. Determine space needed for titel, label, guides, etc.
+      From this calculate panel size and positions.
+
+  9.  Draw layer grobs
+      ▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+  9a. Apply Coordinate Transformations: Interprete <x,y> pairs in
       a Grob eg. as <y,x> (flip coordinates), as <r,ϑ> (polar coordiantes)
       or <x,-y> (reversed y) and so on.
       Munching (interpolate lines by lots of small segments.) for
       non-cartesian coordinates.
 
-  8b. Render into Viewport.
+  9b. Render into panel viewport.
 
-  9.  Render Guides (Axes and Legends), render rest (title, facett boxes).
 
 
 Statistical Transforms

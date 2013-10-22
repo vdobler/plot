@@ -2,7 +2,6 @@ package plot
 
 import (
 	"fmt"
-	"math"
 	"strings"
 )
 
@@ -19,25 +18,38 @@ type Geom interface {
 	// Aes returns the merged default (fixed) aesthetics.
 	Aes(plot *Plot) AesMapping
 
-	// Apply position adjustments (dodge, stack, fill, identity, jitter).
-	AdjustPosition(df *DataFrame, posAdj PositionAdjust)
-
-	// Reparametrize to fundamental Geom.
-	Reparametrize(df *DataFrame) Geom
-
-	// Compute min and max of the given aestetics on df.
-	Bounds(aes string, df *DataFrame) (min, max float64)
+	// Construct Geoms (Step 5), TODO p should be panel.
+	Construct(df *DataFrame, p *Plot) []Fundamental
 
 	// Render interpretes data as the specific geom and produces Grobs.
 	// TODO: Grouping?
 	Render(p *Plot, data *DataFrame, aes AesMapping) []Grob
 }
 
+func TrainScales(p *Plot, df *DataFrame, spec string) {
+	for _, scaleSpec := range strings.Split(spec, " ") {
+		t := strings.Split(scaleSpec, ":")
+		scaleName := t[0]
+		scale, ok := p.Scales[scaleName]
+		if !ok {
+			continue
+		}
+		fields := strings.Split(t[1], ",")
+		for _, field := range fields {
+			if !df.Has(field) {
+				continue
+			}
+			scale.Train(df.Columns[field])
+		}
+	}
+}
+
 // -------------------------------------------------------------------------
 // Geom Point
 
 type GeomPoint struct {
-	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+	Position PositionAdjust
+	Style    AesMapping // The individal fixed, aka non-mapped aesthetics
 }
 
 var _ Geom = GeomPoint{}
@@ -50,17 +62,13 @@ func (p GeomPoint) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.PointStyle, DefaultTheme.PointStyle)
 }
 
-func (p GeomPoint) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
-	// TODO
-}
-
-func (p GeomPoint) Reparametrize(df *DataFrame) Geom {
-	// No reparamization in fundamental geom.
-	return p
-}
-
-func (p GeomPoint) Bounds(aes string, df *DataFrame) (min, max float64) {
-	return ComputeBounds(aes, df, nil)
+func (p GeomPoint) Construct(df *DataFrame, plot *Plot) []Fundamental {
+	// TODO: Handle p.Position == Jitter
+	return []Fundamental{
+		Fundamental{
+			Geom: p,
+			Data: df,
+		}}
 }
 
 func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -108,17 +116,12 @@ func (p GeomLine) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
 }
 
-func (p GeomLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
-	// TODO
-}
-
-func (p GeomLine) Reparametrize(df *DataFrame) Geom {
-	// No reparamization in fundamental geom.
-	return p
-}
-
-func (p GeomLine) Bounds(aes string, df *DataFrame) (min, max float64) {
-	return ComputeBounds(aes, df, nil)
+func (p GeomLine) Construct(df *DataFrame, plot *Plot) []Fundamental {
+	return []Fundamental{
+		Fundamental{
+			Geom: p,
+			Data: df,
+		}}
 }
 
 func (p GeomLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -184,17 +187,25 @@ func (p GeomABLine) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
 }
 
-func (p GeomABLine) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
-	// TODO
-}
+func (p GeomABLine) Construct(df *DataFrame, plot *Plot) []Fundamental {
+	// Only scale training as rendering an abline is dead simple.
 
-func (p GeomABLine) Reparametrize(df *DataFrame) Geom {
-	// No reparamization in fundamental geom.
-	return p
-}
+	ic, sc := df.Columns["intercept"].Data, df.Columns["slope"].Data
+	scaleX, scaleY := plot.Scales["x"], plot.Scales["y"]
+	xmin, xmax := scaleX.DomainMin, scaleX.DomainMax
 
-func (p GeomABLine) Bounds(aes string, df *DataFrame) (min, max float64) {
-	return ComputeBounds(aes, df, nil)
+	for i := 0; i < df.N; i++ {
+		intercept, slope := ic[i], sc[i]
+		ymin := slope*xmin + intercept
+		ymax := slope*xmax + intercept
+		scaleY.TrainByValue(ymin, ymax)
+	}
+
+	return []Fundamental{
+		Fundamental{
+			Geom: p,
+			Data: df,
+		}}
 }
 
 func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -243,17 +254,19 @@ func (t GeomText) Aes(plot *Plot) AesMapping {
 	return MergeStyles(t.Style, plot.Theme.TextStyle, DefaultTheme.TextStyle)
 }
 
-func (t GeomText) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
-	// TODO
-}
-
-func (t GeomText) Reparametrize(df *DataFrame) Geom {
-	// No reparamization in fundamental geom.
-	return t
-}
-
-func (t GeomText) Bounds(aes string, df *DataFrame) (min, max float64) {
-	return ComputeBounds(aes, df, nil)
+func (t GeomText) Construct(df *DataFrame, plot *Plot) []Fundamental {
+	// Only scale training
+	x, y := df.Columns["x"].Data, df.Columns["y"].Data
+	sx, sy := plot.Scales["x"], plot.Scales["y"]
+	for i := 0; i < df.N; i++ {
+		sx.TrainByValue(x[i])
+		sy.TrainByValue(y[i])
+	}
+	return []Fundamental{
+		Fundamental{
+			Geom: t,
+			Data: df,
+		}}
 }
 
 func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -286,7 +299,8 @@ func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
 // Geom Bar
 
 type GeomBar struct {
-	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+	Style    AesMapping // The individal fixed, aka non-mapped aesthetics
+	Position PositionAdjust
 }
 
 var _ Geom = GeomBar{}
@@ -299,50 +313,99 @@ func (b GeomBar) Aes(plot *Plot) AesMapping {
 	return MergeStyles(b.Style, plot.Theme.BarStyle, DefaultTheme.BarStyle)
 }
 
-func (b GeomBar) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
-	// TODO
-}
-
-func (b GeomBar) Bounds(aes string, df *DataFrame) (min, max float64) {
-	panic("Should not be called")
-	return ComputeBounds(aes, df, nil)
-}
-
-func (b GeomBar) Reparametrize(df *DataFrame) Geom {
+func (b GeomBar) Construct(df *DataFrame, plot *Plot) []Fundamental {
 	xf := df.Columns["x"]
+	xd := xf.Data
 	if !df.Has("width") {
 		width := xf.Resolution() * 0.9
 		wf := xf.Const(width, df.N)
 		df.Columns["width"] = wf
 	}
+	yd, wd := df.Columns["y"].Data, df.Columns["width"].Data
 
-	yf, wf := df.Columns["y"], df.Columns["width"]
+	xminf, yminf := NewField(df.N), NewField(df.N)
+	xmaxf, ymaxf := NewField(df.N), NewField(df.N)
+	xminf.Type, yminf.Type, xmaxf.Type, ymaxf.Type = Float, Float, Float, Float
+	xmin, ymin := xminf.Data, yminf.Data
+	xmax, ymax := xminf.Data, yminf.Data
 
-	xmin, ymin := NewField(df.N), NewField(df.N)
-	xmax, ymax := NewField(df.N), NewField(df.N)
-	xmin.Type, ymin.Type, xmax.Type, ymax.Type = Float, Float, Float, Float
-
+	runningYmax := make(map[float64]float64)
+	barsAt := make(map[float64]float64)
 	for i := 0; i < df.N; i++ {
-		if y := yf.Data[i]; y > 0 {
-			ymin.Data[i] = 0
-			ymax.Data[i] = y
+		if y := yd[i]; y > 0 {
+			ymin[i] = 0
+			ymax[i] = y
 		} else {
-			ymin.Data[i] = y
-			ymax.Data[i] = 0
+			ymin[i] = y
+			ymax[i] = 0
 		}
-		x, wh := xf.Data[i], wf.Data[i]/2
-		xmin.Data[i] = x - wh
-		xmax.Data[i] = x + wh
+		x, wh := xd[i], wd[i]/2
+		xmin[i] = x - wh
+		xmax[i] = x + wh
+
+		switch b.Position {
+		case PosStack, PosFill:
+			r := runningYmax[x]
+			h := ymax[i] - ymin[i]
+			runningYmax[x] = r + h
+			ymax[i] += r
+			ymin[i] += r
+		case PosDodge:
+			barsAt[x] = barsAt[x] + 1
+		}
 	}
-	df.Columns["xmin"] = xmin
-	df.Columns["ymin"] = ymin
-	df.Columns["xmax"] = xmax
-	df.Columns["ymax"] = ymax
+
+	switch b.Position {
+	case PosFill:
+		for x, sum := range runningYmax {
+			for i := 0; i < df.N; i++ {
+				if x != xd[i] {
+					continue
+				}
+				ymin[i] /= sum
+				ymax[i] /= sum
+			}
+		}
+	case PosDodge:
+		/******
+		     +------------------- width -----------------+
+		n=3  |--------------|--------------|----- we ----|
+		n=4  |----------|----------|----------|----------|
+		     +-------- wh --------+X
+		               ********/
+		for x, n := range barsAt {
+			j := 0.0
+			for i := 0; i < df.N; i++ {
+				if x != xd[i] {
+					continue
+				}
+				wh := wd[i] / 2
+				we := wd[i] / n
+				xmin[i] = x - wh + j*we
+				xmax[i] = x - wh + (j+1)*we
+				j++
+			}
+		}
+	}
+
+	df.Columns["xmin"] = xminf
+	df.Columns["ymin"] = yminf
+	df.Columns["xmax"] = xmaxf
+	df.Columns["ymax"] = ymaxf
 	df.Delete("width")
 	df.Delete("x")
 	df.Delete("y")
 
-	return GeomRect{Style: b.Style.Copy()}
+	TrainScales(plot, df, "x:xmin,xmax y:ymin,ymax")
+	// TODO: fill, color, .. too?
+
+	return []Fundamental{
+		Fundamental{
+			Geom: GeomRect{
+				Style: b.Style.Copy(),
+			},
+			Data: df,
+		}}
 }
 
 func (b GeomBar) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
@@ -368,57 +431,14 @@ func (r GeomRect) Aes(plot *Plot) AesMapping {
 	return MergeStyles(r.Style, plot.Theme.RectStyle, DefaultTheme.RectStyle)
 }
 
-func (r GeomRect) AdjustPosition(df *DataFrame, posAdj PositionAdjust) {
-}
-
-func (r GeomRect) Reparametrize(df *DataFrame) Geom {
-	return r
-}
-
-func minOf(a, b float64) float64 {
-	if math.IsNaN(a) {
-		return b
-	}
-	if math.IsNaN(b) {
-		return a
-	}
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxOf(a, b float64) float64 {
-	if math.IsNaN(a) {
-		return b
-	}
-	if math.IsNaN(b) {
-		return a
-	}
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func ComputeBounds(aes string, df *DataFrame, combined map[string]string) (min, max float64) {
-	min, max = math.NaN(), math.NaN()
-	if len(combined) > 0 && combined[aes] != "" {
-		for _, field := range strings.Split(combined[aes], ",") {
-			low, high, _, _ := MinMax(df, field)
-			min = minOf(min, low)
-			max = maxOf(max, high)
-		}
-	} else {
-		low, high, _, _ := MinMax(df, aes)
-		min = minOf(min, low)
-		max = maxOf(max, high)
-	}
-	return min, max
-}
-
-func (r GeomRect) Bounds(aes string, df *DataFrame) (min, max float64) {
-	return ComputeBounds(aes, df, map[string]string{"x": "xmin,xmax", "y": "ymin,ymax"})
+func (r GeomRect) Construct(df *DataFrame, plot *Plot) []Fundamental {
+	TrainScales(plot, df, "x:xmin,xmax y:ymin,ymax")
+	// TODO: optional fields too?
+	return []Fundamental{
+		Fundamental{
+			Geom: r,
+			Data: df,
+		}}
 }
 
 func (r GeomRect) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {

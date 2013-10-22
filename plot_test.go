@@ -129,7 +129,7 @@ func TestIndividualSteps(t *testing.T) {
 		plot.Layers[i].Plot = plot
 	}
 
-	// Test PrepareData
+	// 2. PrepareData
 	plot.PrepareData()
 	if fields := plot.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 0 DF has fields %v", fields)
@@ -152,7 +152,7 @@ func TestIndividualSteps(t *testing.T) {
 		}
 	}
 
-	// Test ComputeStatistics
+	// 3. ComputeStatistics
 	plot.ComputeStatistics()
 
 	// No statistic on layer 0: data field is unchanges
@@ -172,13 +172,12 @@ func TestIndividualSteps(t *testing.T) {
 		data.Columns["slope"].Data[0])
 	// StatLabels produces labels
 	if fields := plot.Layers[2].Data.FieldNames(); !same(fields, []string{"x", "y", "text"}) {
-		t.Errorf("Layer 2 %q has fields %v",  plot.Layers[3].Name, fields)
+		t.Errorf("Layer 2 %q has fields %v", plot.Layers[3].Name, fields)
 	}
 	data = plot.Layers[2].Data
 	if data.N != 20 {
 		t.Errorf("Got %d data in label df.", plot.Layers[2].Data.N)
 	}
-
 	// StatBin produces bins
 	if fields := plot.Layers[3].Data.FieldNames(); !same(fields, []string{"x", "count", "ncount", "density", "ndensity"}) {
 		t.Errorf("Layer 3 %q has fields %v", plot.Layers[3].Name, fields)
@@ -188,11 +187,15 @@ func TestIndividualSteps(t *testing.T) {
 		t.Errorf("Got %d data in binned df.", plot.Layers[3].Data.N)
 	}
 
-	// Test Construct ConstructGeoms. This shouldn't change much as
+	// 4. Wireing
+	plot.WireStatToGeom()
+
+	// 5. Test Construct ConstructGeoms. This shouldn't change much as
 	// GeomABLine doesn't reparametrize and we don't do position adjustments.
 	plot.ConstructGeoms()
 
-	plot.RetrainScales()
+	// 6. FinalizeScales
+	plot.FinalizeScales()
 	// Only x and y are set up
 	if sx, ok := plot.Scales["x"]; !ok {
 		t.Errorf("Missing x scale")
@@ -207,7 +210,7 @@ func TestIndividualSteps(t *testing.T) {
 	fmt.Printf("%s\n", plot.Scales["x"])
 	fmt.Printf("%s\n", plot.Scales["y"])
 
-	// Render Geoms to Grobs using scales (Step7).
+	// 7. Render Geoms to Grobs using scales (Step7).
 	plot.RenderGeoms()
 	fmt.Println("Layer 0, raw data")
 	for _, grob := range plot.Layers[0].Grobs {
@@ -225,5 +228,11 @@ func TestIndividualSteps(t *testing.T) {
 	for _, grob := range plot.Layers[3].Grobs {
 		fmt.Println("  ", grob.String())
 	}
+
+	// 8. RenderVisuals
+	plot.RenderVisuals()
+
+	// 9. Output
+	plot.Output()
 
 }

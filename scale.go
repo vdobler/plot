@@ -156,26 +156,20 @@ func (s *Scale) Train(f Field) {
 	}
 }
 
-// Retrain works basically like Train but makes sure that the whole
-// size occupied by the geom used is included into the training.
-func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
+func (s *Scale) TrainByValue(xs ...float64) {
 	if s.Discrete {
-		// TODO: this depends on using the same StrIdx.
-		// Maybe there should be a single StrIdx per plot.
-		// This would internalize string valuies properly.
 		panic("Implement me")
 	} else {
-		// Continous data.
-		min, max := geom.Bounds(aes, df)
-		if !math.IsNaN(min) {
-			if min < s.DomainMin {
-				s.DomainMin = min
+		for _, x := range xs {
+			if math.IsNaN(x) {
+				continue
 			}
-		}
-		if !math.IsNaN(max) {
-			if max > s.DomainMax {
-				s.DomainMax = max
+			if x < s.DomainMin {
+				s.DomainMin = x
+			} else if x > s.DomainMax {
+				s.DomainMax = x
 			}
+
 		}
 	}
 }
@@ -184,21 +178,21 @@ func (s *Scale) Retrain(aes string, geom Geom, df *DataFrame) {
 // Preparing a scale
 
 // Prepare initialises the remaining fields after training.
-func (s *Scale) Prepare() {
+func (s *Scale) Finalize() {
 	if s.Discrete {
-		s.PrepareDiscrete()
+		s.FinalizeDiscrete()
 	} else {
-		s.PrepareContinous()
+		s.FinalizeContinous()
 	}
 }
 
-func (s *Scale) PrepareDiscrete() {
+func (s *Scale) FinalizeDiscrete() {
 	fmt.Printf("Scale %#v\n", *s)
 	panic("Implement me")
 }
 
 // TODO: Scale needs access to data frame field to print string values
-func (s *Scale) PrepareContinous() {
+func (s *Scale) FinalizeContinous() {
 	s.Min, s.Max = s.DomainMin, s.DomainMax
 	if s.FixMin != s.FixMax {
 		s.Min, s.Max = s.FixMin, s.FixMax
