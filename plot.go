@@ -210,7 +210,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 		}
 
 		plotScale, plotOk := plot.Scales[a]
-		panelScale, panelOk := plot.Panels[0][0].Scales[a]
+		_, panelOk := plot.Panels[0][0].Scales[a]
 
 		switch {
 		case plotOk && panelOk:
@@ -508,10 +508,9 @@ func (p *Panel) RenderVisuals() {
 func (p *Panel) Output() {
 }
 
-// Unfacetted plotting, Layers have no own data.
-// TODO: maybe not func on Plot but on Panel
-func (p *Panel) Simple() {
-	// Make sure all layers know their parent plot / and or panel (TODO)
+// Compute does all logic for one panel.
+func (p *Panel) Compute() {
+	// Make sure all layers know their parent panel.
 	for i := range p.Layers {
 		p.Layers[i].Panel = p
 	}
@@ -540,6 +539,7 @@ func (p *Panel) Simple() {
 
 	// Finalize scales: Setup remaining fields.
 	// Step 6
+	// TODO: should be done by plot after all panels have done step 2-5.
 	p.FinalizeScales()
 
 	// Render the fundamental Geoms to Grobs using scales.
@@ -552,27 +552,47 @@ func (p *Panel) Simple() {
 
 	// Have each grob be pixeled into output.
 	// Step 9
+	// TODO: Should be done from plot, not from panel.
 	p.Output()
 }
 
 func (p *Plot) Draw() {
 	p.CreatePanels()
 
-	// p.DistributeAes()
+	for r := range p.Panels {
+		for c := range p.Panels[r] {
+			p.Panels[r][c].Compute()
+		}
+	}
 
-	// Transform scales
-	// Compute statistics
-	// p.ComputeStatistics()
-
-	// Map aestetics
-	// Train scales
-	// Render
 }
 
 // CreatePanels populates p.Panels, coverned by p.Faceting.
 //
 // Not only p.Data is facetted but p.Layers also (if they contain own data).
 func (p *Plot) CreatePanels() {
+	if p.Faceting.Columns == "" && p.Faceting.Rows == "" {
+		p.createSinglePanel()
+	} else {
+		p.createGridPanels()
+	}
+}
+
+func (p *Plot) createSinglePanel() {
+	p.Panels = [][]Panel{
+		[]Panel{
+			Panel{
+				Plot:   p,
+				Data:   p.Data,
+				Aes:    p.Aes.Copy(),
+				Layers: make([]*Layer, len(p.Layers)),
+				Scales: make(map[string]*Scale),
+			},
+		},
+	}
+}
+
+func (p *Plot) createGridPanels() {
 	// Process faceting: How many facets are there, how are they named
 	rows, cols := 1, 1
 	var cunq []float64
@@ -641,32 +661,6 @@ func (p *Plot) CreatePanels() {
 		rows++
 	}
 }
-
-/*
-// merge plot aes into each layer aes
-func (p *Plot) DistributeAes() {
-	for r := range p.Panels {
-		for c := range p.Panels[r] {
-			for l := range p.Panels[r][c].Layers {
-				p.Panels[r][c].Layers[l].Aes = plot.Aes.Merge(p.Panels[r][c].Layers[l].Aes)
-			}
-		}
-	}
-}
-
-func (p *Plot) ComputeStatistics() {
-	for r := range p.Panels {
-		for c := range p.Panels[r] {
-			p.Panels[r][c].Layers = []Layer{}
-			for _, layer := range p.Layers {
-				if layer.Stat != nil {
-					statDF := layer.Stat.Apply(layer.Data, layer.Aes)
-				}
-			}
-		}
-	}
-}
-*/
 
 func UniqueStrings(s []string) (u []string) {
 	if len(s) <= 1 {

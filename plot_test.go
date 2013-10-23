@@ -1,7 +1,7 @@
 package plot
 
 import (
-	"fmt"
+	// "fmt"
 	"image/color"
 	"os"
 	"testing"
@@ -62,6 +62,7 @@ func TestString2Color(t *testing.T) {
 	}
 }
 
+/******************
 func TestIndividualSteps(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
 	plot := &Plot{
@@ -235,3 +236,4 @@ func TestIndividualSteps(t *testing.T) {
 	plot.Output()
 
 }
+************************/

@@ -57,6 +57,8 @@ type Scale struct {
 	Color func(x float64) color.Color // color, fill. Any color
 	Pos   func(x float64) float64     // x, y, size, alpha. In [0,1]
 	Style func(x float64) int         // point and line type. Range ???
+
+	Finalized bool
 }
 
 // NewScale sets up a new scale for the given aesthetic, suitable for
@@ -179,11 +181,17 @@ func (s *Scale) TrainByValue(xs ...float64) {
 
 // Prepare initialises the remaining fields after training.
 func (s *Scale) Finalize() {
+	if s.Finalized {
+		return
+	}
+
 	if s.Discrete {
 		s.FinalizeDiscrete()
 	} else {
 		s.FinalizeContinous()
 	}
+
+	s.Finalized = true
 }
 
 func (s *Scale) FinalizeDiscrete() {
