@@ -27,18 +27,23 @@ type Plot struct {
 	// Layers contains all the layers displayed in the plot.
 	Layers []*Layer
 
+	// Scales can be used to set up non-default scales, e.g.
+	// scales with a transformation or manualy set breaks.
+	//
+	// The scales of plot are distributed to the individual panels
+	// only and are not used directly as scales.
+	Scales map[string]*Scale
+
 	// Panels are the different panels for faceting
 	Panels [][]Panel
-
-	Scales map[string]*Scale
 
 	Theme Theme
 }
 
 // Layer represents one layer of data in a plot.
 type Layer struct {
-	Plot *Plot
-	Name string
+	Panel *Panel
+	Name  string
 
 	// A nil Data will use the Data from the plot this Layer belongs to.
 	Data *DataFrame
@@ -68,16 +73,21 @@ type Layer struct {
 }
 
 // A Panel is one panel, typically in a facetted plot.
+// It does not differ much from a Plot as it actually represents
+// one of the plots in a facetted plot.
 type Panel struct {
-	Data *DataFrame
-
-	RowName string
-	ColName string
-
-	// Plot is the plot this panel belongs to
 	Plot *Plot
 
+	// Data is the data to draw.
+	Data *DataFrame
+
+	// Mapping describes how fieleds in data are mapped to Aesthetics.
+	Aes AesMapping
+
+	// Layers contains all the layers displayed in the plot.
 	Layers []*Layer
+
+	Scales map[string]*Scale
 }
 
 // Facetting describes the facetting to use. The zero value indicates
@@ -144,15 +154,15 @@ func same(s []string, t []string) bool {
 // TODO: how about grouping? 69b0d2b contains grouping code.
 //
 // Step 2 in design.
-func (p *Plot) PrepareData() {
+func (p *Panel) PrepareData() {
 	for _, layer := range p.Layers {
 		// Step 2a
 
 		// Set up data and aestetics mapping.
 		if layer.Data == nil {
-			layer.Data = layer.Plot.Data.Copy()
+			layer.Data = layer.Panel.Data.Copy()
 		}
-		aes := MergeAes(layer.DataMapping, layer.Plot.Aes)
+		aes := MergeAes(layer.DataMapping, layer.Panel.Plot.Aes)
 
 		// Drop all unused (unmapped) fields in the data frame.
 		_, fields := aes.Used(false)
@@ -169,11 +179,11 @@ func (p *Plot) PrepareData() {
 		}
 
 		// Step 2b
-		layer.Plot.PrepareScales(layer.Data, aes)
+		layer.Panel.Plot.PrepareScales(layer.Data, aes)
 	}
 }
 
-// PrepareScales makes sure plot contains all sclaes needed for the
+// PrepareScales makes sure plot contains all scales needed for the
 // aesthetics in aes, the data is scale transformed if requested by the
 // scale and the scales are pre-trained.
 //
@@ -199,41 +209,114 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			continue
 		}
 
-		scale, ok := plot.Scales[a]
+		plotScale, plotOk := plot.Scales[a]
+		panelScale, panelOk := plot.Panels[0][0].Scales[a]
 
-		// Add scale for these aesthetics if not jet set up.
-		if !ok {
-			// Add appropriate scale.
-			scale = NewScale(a, aes[a], data.Columns[a].Type)
-			plot.Scales[a] = scale
-			println("  Added new scale ", a)
-		} else {
-			println("  Scale ", a, " exists %q ", scale.Name)
+		switch {
+		case plotOk && panelOk:
+			// Scale exists and has been distributet to the panels
+			// already.
+		case plotOk && !panelOk:
+			// Must be a user set scale on plot; just distribute.
+			plot.distributeScale(plotScale, a)
+		case !plotOk && !panelOk:
+			// Auto-generated scale, first occurence of this scale.
+			plotScale = NewScale(a, aes[a], data.Columns[a].Type)
+			plot.Scales[a] = plotScale
+			plot.distributeScale(plotScale, a)
+		case !plotOk && panelOk:
+			panic("This should never happen.")
 		}
 
-		// Transform scales if needed.
-		if scale.Transform != nil && scale.Transform != &IdentityScale {
-			if scale.Discrete || scale.Time {
+		// Transform data if scale request such a transform.
+		if plotScale.Transform != nil && plotScale.Transform != &IdentityScale {
+			// TODO: This test should happen much earlier.
+			if plotScale.Discrete || plotScale.Time {
 				plot.Warnf("Cannot transform discrete or time scale %s %q",
-					scale.Aesthetic, scale.Name)
-				scale.Transform = &IdentityScale
+					plotScale.Aesthetic, plotScale.Name)
+				plotScale.Transform = &IdentityScale
 			} else {
 				field := data.Columns[a]
-				field.Apply(scale.Transform.Trans)
+				field.Apply(plotScale.Transform.Trans)
 				println("  Transformed data on scale ", a)
 			}
 		}
-		// Pre-train scales
-		println("  Pretraining ", a, " ", scale.Aesthetic)
-		scale.Train(data.Columns[a])
+
+		// Pre-train scales on all panels
+		for r := range plot.Panels {
+			for c := range plot.Panels[r] {
+				scale := plot.Panels[r][c].Scales[a]
+				scale.Train(data.Columns[a])
+			}
+		}
 	}
 
+}
+
+// distributeScale will distribute scale to all panels. Most of the time
+// all panels share one instance of a scale. But x- and y-scales may be free
+// between rows and columns in which the panels recieve a copy.
+func (plot *Plot) distributeScale(scale *Scale, aes string) {
+	switch plot.scaleSharing(aes) {
+	case "all-panels":
+		// All panels shar the same scale.
+		for r := range plot.Panels {
+			for c := range plot.Panels[r] {
+				plot.Panels[r][c].Scales[aes] = scale
+			}
+		}
+	case "col-shared":
+		// Each column share an individual copy of the scale.
+		for r := range plot.Panels {
+			cpy := *scale
+			for c := range plot.Panels[r] {
+				plot.Panels[r][c].Scales[aes] = &cpy
+			}
+		}
+	case "row-shared":
+		// Add appropriate scale to all panels.
+		for c := range plot.Panels[0] {
+			cpy := *scale
+			for r := range plot.Panels {
+				plot.Panels[r][c].Scales[aes] = &cpy
+			}
+		}
+	default:
+		panic("Ooops " + plot.scaleSharing(aes))
+	}
+}
+
+// scaleSharing determines which panels share the sclae for the aesthetic aes:
+// Only x and y can be not-shared in a feceted plot with set FreeScale.
+func (plot *Plot) scaleSharing(aes string) string {
+	if aes != "x" && aes != "y" {
+		return "all-panels"
+	}
+
+	free := plot.Faceting.FreeScale
+
+	if free == "" {
+		return "all-panels"
+	}
+
+	if aes == "x" && strings.Index(free, "x") != -1 {
+		// Scale for x axis, but x is 'free' i.e. each column may have
+		// its own x-scale, but this one is shared along the whole
+		// column.
+		return "col-shared"
+	}
+
+	if aes == "y" && strings.Index(free, "y") != -1 {
+		return "row-shared"
+	}
+
+	return "all-panels"
 }
 
 // -------------------------------------------------------------------------
 // Step 3: Satistical Transformation
 
-func (p *Plot) ComputeStatistics() {
+func (p *Panel) ComputeStatistics() {
 	for _, layer := range p.Layers {
 		layer.ComputeStatistics()
 	}
@@ -253,7 +336,7 @@ func (layer *Layer) ComputeStatistics() {
 	needed := layer.Stat.Info().NeededAes
 	for _, aes := range needed {
 		if _, ok := layer.Data.Columns[aes]; !ok {
-			layer.Plot.Warnf("Stat %s in Layer %s needs column %s",
+			layer.Panel.Plot.Warnf("Stat %s in Layer %s needs column %s",
 				layer.Stat.Name(), layer.Name, aes)
 			// TODO: more cleanup?
 			layer.Geom = nil // Don't draw anything.
@@ -285,13 +368,13 @@ func (layer *Layer) ComputeStatistics() {
 	        *************************************************************/
 
 	// Do the transform recursively. Step 3b
-	layer.Data = applyRec(layer.Data, layer.Stat, layer.Plot, additionalFields.Elements())
+	layer.Data = applyRec(layer.Data, layer.Stat, layer.Panel, additionalFields.Elements())
 
 }
 
 // Recursively partition data on the the additional fields, apply stat and
 // combine the result.
-func applyRec(data *DataFrame, stat Stat, p *Plot, additionalFields []string) *DataFrame {
+func applyRec(data *DataFrame, stat Stat, p *Panel, additionalFields []string) *DataFrame {
 	if len(additionalFields) == 0 {
 		return stat.Apply(data, p)
 	}
@@ -321,7 +404,7 @@ func applyRec(data *DataFrame, stat Stat, p *Plot, additionalFields []string) *D
 // -------------------------------------------------------------------------
 // Step 4: Wiring Result of Stat to Input of Geom
 
-func (p *Plot) WireStatToGeom() {
+func (p *Panel) WireStatToGeom() {
 	for _, layer := range p.Layers {
 		layer.WireStatToGeom()
 	}
@@ -340,7 +423,7 @@ func (layer *Layer) WireStatToGeom() {
 			layer.Data.Rename(f, a)
 			println("Renaming ", f, " to ", a, " because of stat mapping.")
 		}
-		layer.Plot.PrepareScales(layer.Data, layer.StatMapping)
+		layer.Panel.Plot.PrepareScales(layer.Data, layer.StatMapping)
 	}
 
 	// TODO: Geoms should contain aesthetict only as input, so there
@@ -363,7 +446,7 @@ func (layer *Layer) WireStatToGeom() {
 // applying positional adjustment to same-x geoms and reparametrization to
 // fundamental geoms.
 //
-func (p *Plot) ConstructGeoms() {
+func (p *Panel) ConstructGeoms() {
 	for _, layer := range p.Layers {
 		layer.ConstructGeoms()
 	}
@@ -371,7 +454,7 @@ func (p *Plot) ConstructGeoms() {
 
 func (layer *Layer) ConstructGeoms() {
 	if layer.Geom == nil {
-		layer.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
+		layer.Panel.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
 		return
 	}
 
@@ -380,18 +463,18 @@ func (layer *Layer) ConstructGeoms() {
 	dfSlots := NewStringSetFrom(layer.Data.FieldNames())
 	slots.Remove(dfSlots)
 	if len(slots) > 0 {
-		layer.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
+		layer.Panel.Plot.Warnf("Missing slots in geom %s in layer %s: %v",
 			layer.Geom.Name(), layer.Name, slots.Elements())
 		layer.Geom = nil
 		return
 	}
 
-	layer.Fundamentals = layer.Geom.Construct(layer.Data, layer.Plot)
+	layer.Fundamentals = layer.Geom.Construct(layer.Data, layer.Panel)
 }
 
 // -------------------------------------------------------------------------
 // Step 6: Prepare Scales
-func (p *Plot) FinalizeScales() {
+func (p *Panel) FinalizeScales() {
 	for _, scale := range p.Scales {
 		scale.Finalize()
 	}
@@ -400,14 +483,14 @@ func (p *Plot) FinalizeScales() {
 // -------------------------------------------------------------------------
 // Step 7: Render fundamental Geoms
 
-func (p *Plot) RenderGeoms() {
+func (p *Panel) RenderGeoms() {
 	for _, layer := range p.Layers {
 		if len(layer.Fundamentals) == 0 {
 			continue
 		}
 		for _, fund := range layer.Fundamentals {
 			data := fund.Data
-			aes := fund.Geom.Aes(p)
+			aes := fund.Geom.Aes(p.Plot)
 			layer.Grobs = append(layer.Grobs, fund.Geom.Render(p, data, aes)...)
 		}
 	}
@@ -416,21 +499,21 @@ func (p *Plot) RenderGeoms() {
 // -------------------------------------------------------------------------
 // Step 8: Render remaining parts of plot
 
-func (p *Plot) RenderVisuals() {
+func (p *Panel) RenderVisuals() {
 }
 
 // -------------------------------------------------------------------------
-// Step 9: Ouutput
+// Step 9: Output
 
-func (p *Plot) Output() {
+func (p *Panel) Output() {
 }
 
 // Unfacetted plotting, Layers have no own data.
 // TODO: maybe not func on Plot but on Panel
-func (p *Plot) Simple() {
+func (p *Panel) Simple() {
 	// Make sure all layers know their parent plot / and or panel (TODO)
 	for i := range p.Layers {
-		p.Layers[i].Plot = p
+		p.Layers[i].Panel = p
 	}
 
 	// Prepare data: map aestetics, add scales, clean data frame and
@@ -495,17 +578,20 @@ func (p *Plot) CreatePanels() {
 	var cunq []float64
 	var runq []float64
 
+	// Make sure facetting can be done and determine number of
+	// rows and columns.
 	if p.Faceting.Columns != "" {
 		if f := p.Data.Columns[p.Faceting.Columns]; !f.Discrete() {
-			panic(fmt.Sprintf("Cannot facet over %s (type %s)", p.Faceting.Columns, f.Type.String()))
+			panic(fmt.Sprintf("Cannot facet over %s (type %s)",
+				p.Faceting.Columns, f.Type.String()))
 		}
 		cunq = Levels(p.Data, p.Faceting.Columns).Elements()
 		cols = len(cunq)
 	}
-
 	if p.Faceting.Rows != "" {
 		if f := p.Data.Columns[p.Faceting.Rows]; !f.Discrete() {
-			panic(fmt.Sprintf("Cannot facet over %s (type %s)", p.Faceting.Columns, f.Type.String()))
+			panic(fmt.Sprintf("Cannot facet over %s (type %s)",
+				p.Faceting.Columns, f.Type.String()))
 		}
 		runq = Levels(p.Data, p.Faceting.Rows).Elements()
 		rows = len(runq)

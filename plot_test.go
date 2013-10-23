@@ -122,7 +122,6 @@ func TestIndividualSteps(t *testing.T) {
 				},
 			},
 		},
-		Scales: make(map[string]*Scale),
 	}
 
 	for i := range plot.Layers {

@@ -13,10 +13,15 @@ import (
 //
 // TODO: Location-/scale-invariance? f(x+a) = f(x)+a and f(x*a)=f(x*a) ??
 type Stat interface {
-	Name() string // Return the name of this stat.
+	// Name returns the name of this statistic.
+	Name() string
 
-	Apply(data *DataFrame, plot *Plot) *DataFrame
+	// Apply this statistic to data. The panel can be used to
+	// access the current scales, e.g. if the x-range is needed.
+	Apply(data *DataFrame, panel *Panel) *DataFrame
 
+	// Info returns the StatInfo which describes how this
+	// statistic can be used.
 	Info() StatInfo
 }
 
@@ -33,6 +38,8 @@ type StatInfo struct {
 	OptionalAes []string
 
 	ExtraFieldHandling ExtraFieldHandling
+
+	// TODO: Add information about resulting data frame?
 }
 
 type ExtraFieldHandling int
@@ -64,7 +71,7 @@ func (StatBin) Info() StatInfo {
 	}
 }
 
-func (s StatBin) Apply(data *DataFrame, plot *Plot) *DataFrame {
+func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	if data == nil {
 		return nil
 	}
@@ -176,7 +183,7 @@ func (StatLinReq) Info() StatInfo {
 	}
 }
 
-func (s *StatLinReq) Apply(data *DataFrame, plot *Plot) *DataFrame {
+func (s *StatLinReq) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	if data == nil {
 		return nil
 	}
@@ -242,7 +249,7 @@ func (StatSmooth) Info() StatInfo {
 	}
 }
 
-func (s *StatSmooth) Apply(data *DataFrame, plot *Plot) *DataFrame {
+func (s *StatSmooth) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	if data == nil {
 		return nil
 	}
@@ -311,7 +318,7 @@ func (StatLabel) Info() StatInfo {
 	}
 }
 
-func (s StatLabel) Apply(data *DataFrame, plot *Plot) *DataFrame {
+func (s StatLabel) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	result := NewDataFrame(fmt.Sprintf("labeling %s", data.Name))
 	result.N = data.N
 	textf := NewField(result.N)

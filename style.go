@@ -185,12 +185,12 @@ func Color2String(c color.Color) string {
 // Return a function which maps row number in df to a color.
 // The color is produced by the appropriate scale of plot
 // or a fixed value defined in aes.
-func makeColorFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) color.Color {
+func makeColorFunc(aes string, data *DataFrame, panel *Panel, style AesMapping) func(i int) color.Color {
 	var f func(i int) color.Color
 	if data.Has(aes) {
 		d := data.Columns[aes].Data
 		f = func(i int) color.Color {
-			return plot.Scales[aes].Color(d[i])
+			return panel.Scales[aes].Color(d[i])
 		}
 	} else {
 		theColor := String2Color(style[aes])
@@ -201,12 +201,12 @@ func makeColorFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) fu
 	return f
 }
 
-func makePosFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) float64 {
+func makePosFunc(aes string, data *DataFrame, panel *Panel, style AesMapping) func(i int) float64 {
 	var f func(i int) float64
 	if data.Has(aes) {
 		d := data.Columns[aes].Data
 		f = func(i int) float64 {
-			return plot.Scales[aes].Pos(d[i])
+			return panel.Scales[aes].Pos(d[i])
 		}
 	} else {
 		x := String2Float(style[aes], math.Inf(-1), math.Inf(+1))
@@ -217,12 +217,12 @@ func makePosFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func
 	return f
 }
 
-func makeStyleFunc(aes string, data *DataFrame, plot *Plot, style AesMapping) func(i int) int {
+func makeStyleFunc(aes string, data *DataFrame, panel *Panel, style AesMapping) func(i int) int {
 	var f func(i int) int
 	if data.Has(aes) {
 		d := data.Columns[aes].Data
 		f = func(i int) int {
-			return plot.Scales[aes].Style(d[i])
+			return panel.Scales[aes].Style(d[i])
 		}
 	} else {
 		var x int

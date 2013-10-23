@@ -19,14 +19,14 @@ type Geom interface {
 	Aes(plot *Plot) AesMapping
 
 	// Construct Geoms (Step 5), TODO p should be panel.
-	Construct(df *DataFrame, p *Plot) []Fundamental
+	Construct(df *DataFrame, p *Panel) []Fundamental
 
 	// Render interpretes data as the specific geom and produces Grobs.
 	// TODO: Grouping?
-	Render(p *Plot, data *DataFrame, aes AesMapping) []Grob
+	Render(p *Panel, data *DataFrame, aes AesMapping) []Grob
 }
 
-func TrainScales(p *Plot, df *DataFrame, spec string) {
+func TrainScales(p *Panel, df *DataFrame, spec string) {
 	for _, scaleSpec := range strings.Split(spec, " ") {
 		t := strings.Split(scaleSpec, ":")
 		scaleName := t[0]
@@ -62,7 +62,7 @@ func (p GeomPoint) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.PointStyle, DefaultTheme.PointStyle)
 }
 
-func (p GeomPoint) Construct(df *DataFrame, plot *Plot) []Fundamental {
+func (p GeomPoint) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	// TODO: Handle p.Position == Jitter
 	return []Fundamental{
 		Fundamental{
@@ -71,17 +71,17 @@ func (p GeomPoint) Construct(df *DataFrame, plot *Plot) []Fundamental {
 		}}
 }
 
-func (p GeomPoint) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+func (p GeomPoint) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	points := make([]GrobPoint, data.N)
 	x, y := data.Columns["x"], data.Columns["y"]
-	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
+	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
-	colFunc := makeColorFunc("color", data, plot, style)
+	colFunc := makeColorFunc("color", data, panel, style)
 	// TODO: allow fill also
 
-	sizeFunc := makePosFunc("size", data, plot, style)
-	alphaFunc := makePosFunc("alpha", data, plot, style)
-	shapeFunc := makePosFunc("shape", data, plot, style)
+	sizeFunc := makePosFunc("size", data, panel, style)
+	alphaFunc := makePosFunc("alpha", data, panel, style)
+	shapeFunc := makePosFunc("shape", data, panel, style)
 
 	for i := 0; i < data.N; i++ {
 		points[i].x = xf(x.Data[i])
@@ -116,7 +116,7 @@ func (p GeomLine) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
 }
 
-func (p GeomLine) Construct(df *DataFrame, plot *Plot) []Fundamental {
+func (p GeomLine) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	return []Fundamental{
 		Fundamental{
 			Geom: p,
@@ -124,13 +124,13 @@ func (p GeomLine) Construct(df *DataFrame, plot *Plot) []Fundamental {
 		}}
 }
 
-func (p GeomLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	x, y := data.Columns["x"], data.Columns["y"]
 	grobs := make([]Grob, 0)
-	colFunc := makeColorFunc("color", data, plot, style)
-	sizeFunc := makePosFunc("size", data, plot, style)
-	alphaFunc := makePosFunc("alpha", data, plot, style)
-	typeFunc := makePosFunc("linetype", data, plot, style)
+	colFunc := makeColorFunc("color", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style)
+	alphaFunc := makePosFunc("alpha", data, panel, style)
+	typeFunc := makePosFunc("linetype", data, panel, style)
 
 	// TODO: Grouping
 
@@ -187,11 +187,11 @@ func (p GeomABLine) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
 }
 
-func (p GeomABLine) Construct(df *DataFrame, plot *Plot) []Fundamental {
+func (p GeomABLine) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	// Only scale training as rendering an abline is dead simple.
 
 	ic, sc := df.Columns["intercept"].Data, df.Columns["slope"].Data
-	scaleX, scaleY := plot.Scales["x"], plot.Scales["y"]
+	scaleX, scaleY := panel.Scales["x"], panel.Scales["y"]
 	xmin, xmax := scaleX.DomainMin, scaleX.DomainMax
 
 	for i := 0; i < df.N; i++ {
@@ -208,15 +208,15 @@ func (p GeomABLine) Construct(df *DataFrame, plot *Plot) []Fundamental {
 		}}
 }
 
-func (p GeomABLine) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+func (p GeomABLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	ic, sc := data.Columns["intercept"].Data, data.Columns["slope"].Data
 	grobs := make([]Grob, data.N)
-	colFunc := makeColorFunc("color", data, plot, style)
-	sizeFunc := makePosFunc("size", data, plot, style)
-	alphaFunc := makePosFunc("alpha", data, plot, style)
-	typeFunc := makeStyleFunc("linetype", data, plot, style)
+	colFunc := makeColorFunc("color", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style)
+	alphaFunc := makePosFunc("alpha", data, panel, style)
+	typeFunc := makeStyleFunc("linetype", data, panel, style)
 
-	scaleX, scaleY := plot.Scales["x"], plot.Scales["y"]
+	scaleX, scaleY := panel.Scales["x"], panel.Scales["y"]
 	xmin, xmax := scaleX.DomainMin, scaleX.DomainMax
 	sxmin, sxmax := scaleX.Pos(xmin), scaleX.Pos(xmax)
 
@@ -254,10 +254,10 @@ func (t GeomText) Aes(plot *Plot) AesMapping {
 	return MergeStyles(t.Style, plot.Theme.TextStyle, DefaultTheme.TextStyle)
 }
 
-func (t GeomText) Construct(df *DataFrame, plot *Plot) []Fundamental {
+func (t GeomText) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	// Only scale training
 	x, y := df.Columns["x"].Data, df.Columns["y"].Data
-	sx, sy := plot.Scales["x"], plot.Scales["y"]
+	sx, sy := panel.Scales["x"], panel.Scales["y"]
 	for i := 0; i < df.N; i++ {
 		sx.TrainByValue(x[i])
 		sy.TrainByValue(y[i])
@@ -269,14 +269,14 @@ func (t GeomText) Construct(df *DataFrame, plot *Plot) []Fundamental {
 		}}
 }
 
-func (t GeomText) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+func (t GeomText) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	x, y, s := data.Columns["x"], data.Columns["y"], data.Columns["text"]
-	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
+	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
-	colFunc := makeColorFunc("color", data, plot, style)
-	sizeFunc := makePosFunc("size", data, plot, style)
-	alphaFunc := makePosFunc("alpha", data, plot, style)
-	angleFunc := makePosFunc("angle", data, plot, style)
+	colFunc := makeColorFunc("color", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style)
+	alphaFunc := makePosFunc("alpha", data, panel, style)
+	angleFunc := makePosFunc("angle", data, panel, style)
 
 	grobs := make([]Grob, data.N)
 	for i := 0; i < data.N; i++ {
@@ -313,7 +313,7 @@ func (b GeomBar) Aes(plot *Plot) AesMapping {
 	return MergeStyles(b.Style, plot.Theme.BarStyle, DefaultTheme.BarStyle)
 }
 
-func (b GeomBar) Construct(df *DataFrame, plot *Plot) []Fundamental {
+func (b GeomBar) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	xf := df.Columns["x"]
 	xd := xf.Data
 	if !df.Has("width") {
@@ -396,7 +396,7 @@ func (b GeomBar) Construct(df *DataFrame, plot *Plot) []Fundamental {
 	df.Delete("x")
 	df.Delete("y")
 
-	TrainScales(plot, df, "x:xmin,xmax y:ymin,ymax")
+	TrainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
 	// TODO: fill, color, .. too?
 
 	return []Fundamental{
@@ -408,7 +408,7 @@ func (b GeomBar) Construct(df *DataFrame, plot *Plot) []Fundamental {
 		}}
 }
 
-func (b GeomBar) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+func (b GeomBar) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	panic("Bar has no own render") // TODO: ugly. Maybe remodel Geom inheritance
 }
 
@@ -431,8 +431,8 @@ func (r GeomRect) Aes(plot *Plot) AesMapping {
 	return MergeStyles(r.Style, plot.Theme.RectStyle, DefaultTheme.RectStyle)
 }
 
-func (r GeomRect) Construct(df *DataFrame, plot *Plot) []Fundamental {
-	TrainScales(plot, df, "x:xmin,xmax y:ymin,ymax")
+func (r GeomRect) Construct(df *DataFrame, panel *Panel) []Fundamental {
+	TrainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
 	// TODO: optional fields too?
 	return []Fundamental{
 		Fundamental{
@@ -441,16 +441,16 @@ func (r GeomRect) Construct(df *DataFrame, plot *Plot) []Fundamental {
 		}}
 }
 
-func (r GeomRect) Render(plot *Plot, data *DataFrame, style AesMapping) []Grob {
+func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	xmin, ymin := data.Columns["xmin"].Data, data.Columns["ymin"].Data
 	xmax, ymax := data.Columns["xmax"].Data, data.Columns["ymax"].Data
-	xf, yf := plot.Scales["x"].Pos, plot.Scales["y"].Pos
+	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
-	colFunc := makeColorFunc("color", data, plot, style)
-	fillFunc := makeColorFunc("fill", data, plot, style)
-	linetypeFunc := makeStyleFunc("linetype", data, plot, style)
-	alphaFunc := makePosFunc("alpha", data, plot, style)
-	sizeFunc := makePosFunc("size", data, plot, style)
+	colFunc := makeColorFunc("color", data, panel, style)
+	fillFunc := makeColorFunc("fill", data, panel, style)
+	linetypeFunc := makeStyleFunc("linetype", data, panel, style)
+	alphaFunc := makePosFunc("alpha", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style)
 
 	grobs := make([]Grob, 0)
 	for i := 0; i < data.N; i++ {
