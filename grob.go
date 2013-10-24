@@ -1,11 +1,11 @@
 package plot
 
 import (
+	"code.google.com/p/plotinum/vg"
 	"fmt"
 	"image/color"
 	"math"
 	"strings"
-	"code.google.com/p/plotinum/vg"
 )
 
 type Grob interface {
@@ -32,13 +32,17 @@ func (point GrobPoint) Draw(vp Viewport) {
 	s := vg.Points(point.size)
 	var p vg.Path
 
+	fmt.Printf("Point at %.0f,%.0f size %.1f\n",
+		x, y, s)
+
 	draw := vp.Canvas.Stroke
 	if point.shape >= SolidCirclePoint && point.shape <= SolidNablaPoint {
 		draw = vp.Canvas.Fill
 	}
 
 	switch point.shape {
-	case BlankPoint: return
+	case BlankPoint:
+		return
 	case CirclePoint, SolidCirclePoint:
 		p.Arc(x, x, vg.Points(point.size), 0, 2*math.Pi)
 		p.Close()
@@ -59,30 +63,30 @@ func (point GrobPoint) Draw(vp Viewport) {
 		draw(p)
 	case CrossPoint:
 		ss := s / 1.3
-		p.Move(x-ss,y-ss)
-		p.Line(x+ss,y+ss)
-		p.Move(x-ss,y+ss)
-		p.Line(x+ss,y-ss)
+		p.Move(x-ss, y-ss)
+		p.Line(x+ss, y+ss)
+		p.Move(x-ss, y+ss)
+		p.Line(x+ss, y-ss)
 		draw(p)
 	case PlusPoint:
-		p.Move(x-s,y)
-		p.Line(x+s,y)
-		p.Move(x,y-s)
-		p.Line(x,y+s)
+		p.Move(x-s, y)
+		p.Line(x+s, y)
+		p.Move(x, y-s)
+		p.Line(x, y+s)
 		draw(p)
 	case StarPoint:
 		ss := s / 1.3
-		p.Move(x-ss,y-ss)
-		p.Line(x+ss,y+ss)
-		p.Move(x-ss,y+ss)
-		p.Line(x+ss,y-ss)
-		p.Move(x-s,y)
-		p.Line(x+s,y)
-		p.Move(x,y-s)
-		p.Line(x,y+s)
+		p.Move(x-ss, y-ss)
+		p.Line(x+ss, y+ss)
+		p.Move(x-ss, y+ss)
+		p.Line(x+ss, y-ss)
+		p.Move(x-s, y)
+		p.Line(x+s, y)
+		p.Move(x, y-s)
+		p.Line(x, y+s)
 		draw(p)
 	default:
-		println("Implement Draw for points "+point.shape.String())
+		println("Implement Draw for points " + point.shape.String())
 	}
 }
 
@@ -107,11 +111,11 @@ var _ Grob = GrobLine{}
 var dashLength = [][]vg.Length{
 	[]vg.Length{1},
 	[]vg.Length{10},
-	[]vg.Length{10,10},
-	[]vg.Length{5,4},
-	[]vg.Length{10,4,5,4},
-	[]vg.Length{20,10},
-	[]vg.Length{10,10,20,10},
+	[]vg.Length{10, 10},
+	[]vg.Length{5, 4},
+	[]vg.Length{10, 4, 5, 4},
+	[]vg.Length{20, 10},
+	[]vg.Length{10, 10, 20, 10},
 }
 
 func (line GrobLine) Draw(vp Viewport) {
@@ -147,6 +151,7 @@ type GrobPath struct {
 var _ Grob = GrobPath{}
 
 func (path GrobPath) Draw(vp Viewport) {
+	vp.Canvas.Push()
 	vp.Canvas.SetColor(path.color)
 	vp.Canvas.SetLineWidth(vg.Points(path.size))
 	vp.Canvas.SetLineDash(dashLength[path.linetype], 0)
@@ -154,11 +159,12 @@ func (path GrobPath) Draw(vp Viewport) {
 	var p vg.Path
 
 	p.Move(x, y)
-	for i:=1; i<len(path.points); i++ {
+	for i := 1; i < len(path.points); i++ {
 		x, y = vp.X(path.points[i].x), vp.Y(path.points[i].y)
 		p.Line(x, y)
 	}
 	vp.Canvas.Stroke(p)
+	vp.Canvas.Pop()
 }
 
 func (path GrobPath) String() string {
@@ -202,9 +208,13 @@ func (text GrobText) Draw(vp Viewport) {
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(text.color)
 	x, y := vp.X(text.x), vp.Y(text.y)
+	vp.Canvas.Translate(x, y)
 	vp.Canvas.Rotate(text.angle)
-	font, _ := vg.MakeFont("Courier", vg.Points(text.size))
-	vp.Canvas.FillString(font, x, y, text.text)
+	font, err := vg.MakeFont("Courier", vg.Points(text.size))
+	if err != nil {
+		panic(err.Error())
+	}
+	vp.Canvas.FillString(font, 0, 0, text.text)
 	vp.Canvas.Pop()
 }
 
@@ -243,18 +253,20 @@ type GrobRect struct {
 var _ Grob = GrobRect{}
 
 func (rect GrobRect) Draw(vp Viewport) {
+	vp.Canvas.Push()
 	vp.Canvas.SetColor(rect.fill)
-	vp.Canvas.SetLineWidth(0)
+	vp.Canvas.SetLineWidth(2)
 	xmin, ymin := vp.X(rect.xmin), vp.Y(rect.ymin)
 	xmax, ymax := vp.X(rect.xmax), vp.Y(rect.ymax)
 	var p vg.Path
 
 	p.Move(xmin, ymin)
-	p.Line(xmin, ymax)
+	p.Line(xmax, ymin)
 	p.Line(xmax, ymax)
 	p.Line(xmin, ymax)
 	p.Close()
 	vp.Canvas.Fill(p)
+	vp.Canvas.Pop()
 }
 
 func (rect GrobRect) String() string {
@@ -270,21 +282,24 @@ type Viewport struct {
 	// The lower left corner, width and height of this vp
 	// in canvas units
 	X0, Y0, Width, Height vg.Length
-	Canvas vg.Canvas
+	Canvas                vg.Canvas
 }
 
 // SubViewport returns the area described by x0,y0,width,height in
 // natural grob coordinates [0,1] as a viewport.
 func SubVieport(vp Viewport, x0, y0, width, height float64) Viewport {
 	return Viewport{
-		X0: vp.X0 + vg.Length(x0)*vp.Width,
-		Y0: vp.Y0 + vg.Length(y0)*vp.Height,
-		Width: vg.Length(width)*vp.Width,
-		Height: vg.Length(height)*vp.Height,
+		X0:     vp.X0 + vg.Length(x0)*vp.Width,
+		Y0:     vp.Y0 + vg.Length(y0)*vp.Height,
+		Width:  vg.Length(width) * vp.Width,
+		Height: vg.Length(height) * vp.Height,
 		Canvas: vp.Canvas,
 	}
 }
 
 // X and Y turn natural grob coordinates [0,1] to canvas lengths.
 func (vp Viewport) X(x float64) vg.Length { return vp.X0 + vg.Length(x)*vp.Width }
-func (vp Viewport) Y(y float64) vg.Length { return vp.Y0 + vg.Length(y)*vp.Height }
+func (vp Viewport) Y(y float64) vg.Length {
+	ans := vp.Y0 + vg.Length(y)*vp.Height
+	return ans
+}

@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
 	"os"
@@ -246,5 +247,38 @@ func TestIndividualSteps(t *testing.T) {
 	for _, grob := range panel.Layers[3].Grobs {
 		fmt.Println("  ", grob.String())
 	}
+
+	// Output
+	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(800, 600)}
+	vp := Viewport{
+		X0:     50,
+		Y0:     50,
+		Width:  700,
+		Height: 500,
+		Canvas: pngCanvas,
+	}
+	file, err := os.Create("example.png")
+	if err != nil {
+		t.Fatalf("%", err)
+	}
+
+	fmt.Println("Layer 0, raw data")
+	for _, grob := range panel.Layers[0].Grobs {
+		grob.Draw(vp)
+	}
+	fmt.Println("Layer 1, linear regression")
+	for _, grob := range panel.Layers[1].Grobs {
+		grob.Draw(vp)
+	}
+	fmt.Println("Layer 2, labels")
+	for _, grob := range panel.Layers[2].Grobs {
+		grob.Draw(vp)
+	}
+	fmt.Println("Layer 3, histogram")
+	for _, grob := range panel.Layers[3].Grobs {
+		grob.Draw(vp)
+	}
+	pngCanvas.WriteTo(file)
+	file.Close()
 
 }

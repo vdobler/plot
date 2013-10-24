@@ -98,7 +98,7 @@ func (p GeomPoint) Render(panel *Panel, data *DataFrame, style AesMapping) []Gro
 
 	sizeFunc := makePosFunc("size", data, panel, style)
 	alphaFunc := makePosFunc("alpha", data, panel, style)
-	shapeFunc := makePosFunc("shape", data, panel, style)
+	shapeFunc := makeStyleFunc("shape", data, panel, style)
 
 	for i := 0; i < data.N; i++ {
 		points[i].x = xf(x.Data[i])
@@ -147,7 +147,7 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 	colFunc := makeColorFunc("color", data, panel, style)
 	sizeFunc := makePosFunc("size", data, panel, style)
 	alphaFunc := makePosFunc("alpha", data, panel, style)
-	typeFunc := makePosFunc("linetype", data, panel, style)
+	typeFunc := makeStyleFunc("linetype", data, panel, style)
 
 	// TODO: Grouping
 
