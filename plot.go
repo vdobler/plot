@@ -35,7 +35,7 @@ type Plot struct {
 	Scales map[string]*Scale
 
 	// Panels are the different panels for faceting
-	Panels [][]Panel
+	Panels [][]*Panel
 
 	Theme Theme
 }
@@ -497,75 +497,74 @@ func (p *Panel) RenderGeoms() {
 }
 
 // -------------------------------------------------------------------------
-// Step 8: Render remaining parts of plot
+// Plot drawing
 
-func (p *Panel) RenderVisuals() {
-}
+// Draw generates all parts of the plot and renders the output.
+func (plot *Plot) Draw() {
+	plot.CreatePanels()
 
-// -------------------------------------------------------------------------
-// Step 9: Output
+	for r := range plot.Panels {
+		for c := range plot.Panels[r] {
+			panel := plot.Panels[r][c]
 
-func (p *Panel) Output() {
-}
+			// Make sure all layers know their parent panel.
+			for i := range panel.Layers {
+				panel.Layers[i].Panel = panel
+			}
 
-// Compute does all logic for one panel.
-func (p *Panel) Compute() {
-	// Make sure all layers know their parent panel.
-	for i := range p.Layers {
-		p.Layers[i].Panel = p
+			// Prepare data: map aestetics, add scales, clean data frame and
+			// apply scale transformations. Mapped scales are pre-trained.
+			// Step 2
+			panel.PrepareData()
+
+			// The second step: Compute statistics.
+			// If a layer has a statistical transform: Apply this transformation
+			// to the data frame of this layer.
+			// Step 3
+			panel.ComputeStatistics()
+
+			// Make sure the output of the stat matches the input expected
+			// by the geom.
+			// Step 4
+			panel.WireStatToGeom()
+
+			// Construct geoms
+			// Apply geom specific position adjustments, train the involved
+			// scales and produce a set of fundamental geoms.
+			// Step 5
+			panel.ConstructGeoms()
+		}
 	}
 
-	// Prepare data: map aestetics, add scales, clean data frame and
-	// apply scale transformations. Mapped scales are pre-trained.
-	// Step 2
-	p.PrepareData()
+	for r := range plot.Panels {
+		for _, panel := range plot.Panels[r] {
 
-	// The second step: Compute statistics.
-	// If a layer has a statistical transform: Apply this transformation
-	// to the data frame of this layer.
-	// Step 3
-	p.ComputeStatistics()
+			// Finalize scales: Setup remaining fields.
+			// This can be done only after each panel completed
+			// the steps 2-5 ConstructGeoms which might change
+			// the scales.
+			// Step 6
+			panel.FinalizeScales()
 
-	// Make sure the output of the stat matches the input expected
-	// by the geom.
-	// Step 4
-	p.WireStatToGeom()
-
-	// Construct geoms
-	// Apply geom specific position adjustments, train the involved
-	// scales and produce a set of fundamental geoms.
-	// Step 5
-	p.ConstructGeoms()
-
-	// Finalize scales: Setup remaining fields.
-	// Step 6
-	// TODO: should be done by plot after all panels have done step 2-5.
-	p.FinalizeScales()
-
-	// Render the fundamental Geoms to Grobs using scales.
-	// Step 7
-	p.RenderGeoms()
+			// Render the fundamental Geoms to Grobs using scales.
+			// Step 7
+			panel.RenderGeoms()
+		}
+	}
 
 	// Render rest of elements (guides, titels, factting, ...)
 	// Step 8
-	p.RenderVisuals()
+	plot.RenderVisuals()
 
 	// Have each grob be pixeled into output.
 	// Step 9
 	// TODO: Should be done from plot, not from panel.
-	p.Output()
-}
-
-func (p *Plot) Draw() {
-	p.CreatePanels()
-
-	for r := range p.Panels {
-		for c := range p.Panels[r] {
-			p.Panels[r][c].Compute()
-		}
-	}
+	plot.Output()
 
 }
+
+// -------------------------------------------------------------------------
+// Panel creation and layout.
 
 // CreatePanels populates p.Panels, coverned by p.Faceting.
 //
@@ -579,9 +578,9 @@ func (p *Plot) CreatePanels() {
 }
 
 func (p *Plot) createSinglePanel() {
-	p.Panels = [][]Panel{
-		[]Panel{
-			Panel{
+	p.Panels = [][]*Panel{
+		[]*Panel{
+			&Panel{
 				Plot:   p,
 				Data:   p.Data,
 				Aes:    p.Aes.Copy(),
@@ -617,13 +616,15 @@ func (p *Plot) createGridPanels() {
 		rows = len(runq)
 	}
 
-	p.Panels = make([][]Panel, rows, rows+1)
+	p.Panels = make([][]*Panel, rows, rows+1)
 	for r := 0; r < rows; r++ {
-		p.Panels[r] = make([]Panel, cols, cols+1)
-		rdf := Filter(p.Data, p.Faceting.Rows, runq[r])
+		p.Panels[r] = make([]*Panel, cols, cols+1)
+		rowData := Filter(p.Data, p.Faceting.Rows, runq[r])
 		for c := 0; c < cols; c++ {
-			p.Panels[r][c].Data = Filter(rdf, p.Faceting.Columns, cunq[c])
+			p.Panels[r][c] = new(Panel)
+			p.Panels[r][c].Data = Filter(rowData, p.Faceting.Columns, cunq[c])
 			for _, layer := range p.Layers {
+				// Copy plot layers to panel, make sure layer data is filtered.
 				if layer.Data != nil {
 					layer.Data = Filter(layer.Data, p.Faceting.Rows, runq[r])
 					layer.Data = Filter(layer.Data, p.Faceting.Columns, cunq[c])
@@ -632,7 +633,8 @@ func (p *Plot) createGridPanels() {
 			}
 
 			if p.Faceting.Totals {
-				p.Panels[r] = append(p.Panels[r], Panel{Data: rdf})
+				// Add a total columns containing all data of this row.
+				p.Panels[r] = append(p.Panels[r], &Panel{Data: rowData})
 				for _, layer := range p.Layers {
 					if layer.Data != nil {
 						layer.Data = Filter(layer.Data, p.Faceting.Rows, runq[r])
@@ -643,24 +645,41 @@ func (p *Plot) createGridPanels() {
 		}
 	}
 	if p.Faceting.Totals {
-		/*
-			p.Panels = append(p.Panels, make([]Panel, cols+1))
-			for c := 0; c < cols; c++ {
-				cdf := p.Data.Filter(p.Faceting.Columns, cunq[c])
-				p.Panels[rows][c] = Panel{Data: cdf}
-			}
-			p.Panels[rows][cols] = Panel{Data: p.Data}
+		// Add a total row containing all column data.
+		p.Panels = append(p.Panels, make([]*Panel, cols+1))
+		for c := 0; c < cols; c++ {
+			colData := Filter(p.Data, p.Faceting.Columns, cunq[c])
+			p.Panels[rows][c] = &Panel{Data: colData}
 			for _, layer := range p.Layers {
 				if layer.Data != nil {
-					layer.Data = layer.Data.Filter(p.Faceting.Columns, cunq[c])
+					layer.Data = Filter(layer.Data, p.Faceting.Columns, cunq[c])
 				}
 				p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
 			}
-		*/
+		}
+		p.Panels[rows][cols] = &Panel{Data: p.Data}
+		for _, layer := range p.Layers {
+			p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
+		}
 		cols++
 		rows++
 	}
 }
+
+// -------------------------------------------------------------------------
+// Step 8: Render remaining parts of plot
+
+func (plot *Plot) RenderVisuals() {
+}
+
+// -------------------------------------------------------------------------
+// Step 9: Output
+
+func (plot *Plot) Output() {
+}
+
+// -------------------------------------------------------------------------
+// Misc
 
 func UniqueStrings(s []string) (u []string) {
 	if len(s) <= 1 {
