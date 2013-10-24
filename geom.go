@@ -26,7 +26,11 @@ type Geom interface {
 	Render(p *Panel, data *DataFrame, aes AesMapping) []Grob
 }
 
-func TrainScales(p *Panel, df *DataFrame, spec string) {
+// trainScales is a helper for geom construction: The some scales of p are
+// trained on some fields of data. The spec arguments is of the form
+//     "x:xmin,xmax y:ylow,yhigh"
+// and determines which scales (here x and y) are trained on which fields.
+func trainScales(p *Panel, data *DataFrame, spec string) {
 	for _, scaleSpec := range strings.Split(spec, " ") {
 		t := strings.Split(scaleSpec, ":")
 		scaleName := t[0]
@@ -43,6 +47,19 @@ func TrainScales(p *Panel, df *DataFrame, spec string) {
 		}
 	}
 }
+
+// -------------------------------------------------------------------------
+// Position Adjustments
+
+type PositionAdjust int
+
+const (
+	PosIdentity PositionAdjust = iota
+	PosJitter
+	PosStack
+	PosFill
+	PosDodge
+)
 
 // -------------------------------------------------------------------------
 // Geom Point
@@ -396,7 +413,7 @@ func (b GeomBar) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	df.Delete("x")
 	df.Delete("y")
 
-	TrainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
+	trainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
 	// TODO: fill, color, .. too?
 
 	return []Fundamental{
@@ -432,7 +449,7 @@ func (r GeomRect) Aes(plot *Plot) AesMapping {
 }
 
 func (r GeomRect) Construct(df *DataFrame, panel *Panel) []Fundamental {
-	TrainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
+	trainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
 	// TODO: optional fields too?
 	return []Fundamental{
 		Fundamental{

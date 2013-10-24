@@ -797,16 +797,3 @@ type Viewport struct {
 
 	// Functions to turn grob coordinates to pixel
 }
-
-// -------------------------------------------------------------------------
-// Position Adjustments
-
-type PositionAdjust int
-
-const (
-	PosIdentity PositionAdjust = iota
-	PosJitter
-	PosStack
-	PosFill
-	PosDodge
-)

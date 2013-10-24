@@ -64,22 +64,23 @@ type Scale struct {
 // NewScale sets up a new scale for the given aesthetic, suitable for
 // the given data in field.
 func NewScale(aesthetic string, name string, ft FieldType) *Scale {
-	scale := Scale{}
+	scale := Scale{
+		Name:         name,
+		Aesthetic:    aesthetic,
+		DomainMin:    math.Inf(+1),
+		DomainMax:    math.Inf(-1),
+		DomainLevels: NewFloatSet(),
+		Transform:    &IdentityScale,
+		ExpandRel:    0.05,
+		ExpandAbs:    0.0,
+	}
+
 	switch ft {
 	case Time:
 		scale.Time = true
 	case String:
 		scale.Discrete = true
 	}
-	scale.Aesthetic = aesthetic
-	scale.DomainMin = math.Inf(+1)
-	scale.DomainMax = math.Inf(-1)
-	scale.DomainLevels = NewFloatSet()
-
-	scale.Transform = &IdentityScale
-
-	scale.ExpandRel = 0.05
-	scale.ExpandAbs = 0.0
 
 	return &scale
 }
@@ -90,28 +91,28 @@ func (s *Scale) String() string {
 		return time.Unix(int64(x), 0).Format("2006-01-02 15:04:05")
 	}
 
-	t := fmt.Sprintf("Scale for %q: ", s.Aesthetic)
+	t := fmt.Sprintf("Scale %q named %q: ", s.Aesthetic, s.Name)
 	if s.Discrete {
-		t += "discrete\n    Domain = "
+		t += "discrete\n    Domain:    "
 		t += s.FixLevels.String()
 	} else {
 		if s.Time {
-			t += "time\n    Domain = "
+			t += "time\n    Domain:    "
 			t += f2t(s.DomainMin) + " -- " + f2t(s.DomainMax)
 		} else {
-			t += "continous\n    Domain = "
+			t += "continous\n    Domain:    "
 			t += fmt.Sprintf("%.2f -- %.2f", s.DomainMin, s.DomainMax)
 		}
 	}
-	t += "\n    Transform = " + s.Transform.Name
-	t += "\n    Breaks: "
+	t += "\n    Transform: " + s.Transform.Name
+	t += "\n    Breaks:    "
 	if len(s.Breaks) == 0 {
 		t += "- empty -"
 	} else {
 		for _, b := range s.Breaks {
 			t += fmt.Sprintf("%8.1f", b)
 		}
-		t += "\n    Labels: "
+		t += "\n    Labels:    "
 		if len(s.Labels) == 0 {
 			t += "- empty -"
 		} else {
@@ -125,9 +126,9 @@ func (s *Scale) String() string {
 	}
 
 	if s.Pos == nil && s.Color == nil && s.Style == nil {
-		t += "\n    not prepared"
+		t += "\n    Status:    not prepared"
 	} else {
-		t += "\n    prepared"
+		t += "\n    Status:    prepared"
 	}
 	return t
 }
