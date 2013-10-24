@@ -40,6 +40,29 @@ type Plot struct {
 	Theme Theme
 }
 
+func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
+	df, err := NewDataFrameFrom(measurement)
+	if err != nil {
+		return nil, err
+	}
+
+	if aesthetics == nil {
+		aesthetics = make(AesMapping)
+	}
+
+	plot := Plot{
+		Data:     df,
+		Faceting: Faceting{},
+		Aes:      aesthetics,
+		Layers:   nil,
+		Scales:   make(map[string]*Scale),
+		Panels:   nil,
+		Theme:    DefaultTheme,
+	}
+
+	return &plot, nil
+}
+
 // Layer represents one layer of data in a plot.
 type Layer struct {
 	Panel *Panel
@@ -155,7 +178,8 @@ func same(s []string, t []string) bool {
 //
 // Step 2 in design.
 func (p *Panel) PrepareData() {
-	for _, layer := range p.Layers {
+	for i, layer := range p.Layers {
+		println("PrepareData on layer", i, layer.Name)
 		// Step 2a
 
 		// Set up data and aestetics mapping.
@@ -203,25 +227,30 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 	}
 
 	for a := range aes {
-		println("PrepareScales working on ", a)
 		if !scaleable[a] {
-			println("  Un-scalable scale ", a)
+			println("PrepareScales", a, "is un-scalable")
 			continue
 		}
 
 		plotScale, plotOk := plot.Scales[a]
-		_, panelOk := plot.Panels[0][0].Scales[a]
-
+		panelOk := false
+		if len(plot.Panels) > 0 {
+			_, panelOk = plot.Panels[0][0].Scales[a]
+		}
 		switch {
 		case plotOk && panelOk:
 			// Scale exists and has been distributet to the panels
 			// already.
+			println("PrepareScales", a, "already distributed")
 		case plotOk && !panelOk:
 			// Must be a user set scale on plot; just distribute.
+			println("PrepareScales", a, "distribute from plot")
 			plot.distributeScale(plotScale, a)
 		case !plotOk && !panelOk:
 			// Auto-generated scale, first occurence of this scale.
-			plotScale = NewScale(a, aes[a], data.Columns[a].Type)
+			name, typ := aes[a], data.Columns[a].Type
+			println("PrepareScales", a, "new", name, typ.String())
+			plotScale = NewScale(a, name, typ)
 			plot.Scales[a] = plotScale
 			plot.distributeScale(plotScale, a)
 		case !plotOk && panelOk:
@@ -257,9 +286,11 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 // all panels share one instance of a scale. But x- and y-scales may be free
 // between rows and columns in which the panels recieve a copy.
 func (plot *Plot) distributeScale(scale *Scale, aes string) {
-	switch plot.scaleSharing(aes) {
+	sharing := plot.scaleSharing(aes)
+	println("distributeScale", aes, sharing)
+	switch sharing {
 	case "all-panels":
-		// All panels shar the same scale.
+		// All panels share the same scale.
 		for r := range plot.Panels {
 			for c := range plot.Panels[r] {
 				plot.Panels[r][c].Scales[aes] = scale
@@ -507,11 +538,6 @@ func (plot *Plot) Draw() {
 		for c := range plot.Panels[r] {
 			panel := plot.Panels[r][c]
 
-			// Make sure all layers know their parent panel.
-			for i := range panel.Layers {
-				panel.Layers[i].Panel = panel
-			}
-
 			// Prepare data: map aestetics, add scales, clean data frame and
 			// apply scale transformations. Mapped scales are pre-trained.
 			// Step 2
@@ -558,7 +584,6 @@ func (plot *Plot) Draw() {
 
 	// Have each grob be pixeled into output.
 	// Step 9
-	// TODO: Should be done from plot, not from panel.
 	plot.Output()
 
 }
@@ -569,29 +594,46 @@ func (plot *Plot) Draw() {
 // CreatePanels populates p.Panels, coverned by p.Faceting.
 //
 // Not only p.Data is facetted but p.Layers also (if they contain own data).
-func (p *Plot) CreatePanels() {
-	if p.Faceting.Columns == "" && p.Faceting.Rows == "" {
-		p.createSinglePanel()
+func (plot *Plot) CreatePanels() {
+	if plot.Faceting.Columns == "" && plot.Faceting.Rows == "" {
+		plot.createSinglePanel()
 	} else {
-		p.createGridPanels()
+		plot.createGridPanels()
+	}
+
+	// Make sure all layers know their parent panel and each panel
+	// is linked back to its plot.
+	for r := range plot.Panels {
+		for c := range plot.Panels[r] {
+			panel := plot.Panels[r][c]
+			panel.Plot = plot
+			for i := range panel.Layers {
+				panel.Layers[i].Panel = panel
+			}
+		}
 	}
 }
 
-func (p *Plot) createSinglePanel() {
-	p.Panels = [][]*Panel{
+func (plot *Plot) createSinglePanel() {
+	println("createSinglePanel()")
+	plot.Panels = [][]*Panel{
 		[]*Panel{
 			&Panel{
-				Plot:   p,
-				Data:   p.Data,
-				Aes:    p.Aes.Copy(),
-				Layers: make([]*Layer, len(p.Layers)),
+				Plot:   plot,
+				Data:   plot.Data,
+				Aes:    plot.Aes.Copy(),
+				Layers: make([]*Layer, len(plot.Layers)),
 				Scales: make(map[string]*Scale),
 			},
 		},
 	}
+	for i, layer := range plot.Layers {
+		plot.Panels[0][0].Layers[i] = layer
+	}
 }
 
 func (p *Plot) createGridPanels() {
+	println("createGridPanel()")
 	// Process faceting: How many facets are there, how are they named
 	rows, cols := 1, 1
 	var cunq []float64

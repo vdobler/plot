@@ -1,7 +1,7 @@
 package plot
 
 import (
-	// "fmt"
+	"fmt"
 	"image/color"
 	"os"
 	"testing"
@@ -62,89 +62,102 @@ func TestString2Color(t *testing.T) {
 	}
 }
 
-/******************
 func TestIndividualSteps(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
-	plot := &Plot{
-		Data: df,
-		Aes: AesMapping{
-			"x": "Height",
-			"y": "Weight",
-		},
-		Layers: []*Layer{
-			&Layer{
-				Name: "Raw Data",
-				Stat: nil, // identity
-				Geom: GeomPoint{
-					Style: AesMapping{
-						"color": "red",
-						"shape": "diamond",
-					},
-				},
-			},
-			&Layer{
-				Name: "Linear regression",
-				Stat: &StatLinReq{},
-				Geom: GeomABLine{
-					Style: AesMapping{
-						"color":    "green",
-						"linetype": "dashed",
-					},
-				},
-				// StatLinReq produces intercept/slope suitable for GeomABLine
-				GeomMapping: nil,
-			},
-			&Layer{
-				Name: "Age Label",
-				DataMapping: AesMapping{
-					"value": "Age",
-				},
-				Stat: &StatLabel{Format: "%.0f years"},
-				Geom: GeomText{
-					Style: AesMapping{
-						"color":  "blue",
-						"angle":  "45°",
-						"family": "Helvetica",
-					},
-				},
-				GeomMapping: nil,
-			},
-			&Layer{
-				Name:        "Histogram",
-				DataMapping: AesMapping{"y": ""}, // clear mapping of y to Height
-				Stat:        &StatBin{Drop: true},
-				StatMapping: AesMapping{
-					"y": "count",
-				},
-				Geom: GeomBar{
-					Style: AesMapping{
-						"fill": "gray50",
-					},
-				},
-			},
-		},
+	aes := AesMapping{
+		"x": "Height",
+		"y": "Weight",
+	}
+	plot, err := NewPlot(measurement, aes)
+	if err != nil {
+		t.Fatalf("Unxpected error: %s", err)
 	}
 
-	for i := range plot.Layers {
-		plot.Layers[i].Plot = plot
+	//
+	// Add layers to plot
+	//
+
+	rawData := Layer{
+		Name: "Raw Data",
+		Stat: nil, // identity
+		Geom: GeomPoint{
+			Style: AesMapping{
+				"color": "red",
+				"shape": "diamond",
+			}}}
+	plot.Layers = append(plot.Layers, &rawData)
+
+	linReg := Layer{
+		Name: "Linear regression",
+		Stat: &StatLinReq{},
+		Geom: GeomABLine{
+			Style: AesMapping{
+				"color":    "green",
+				"linetype": "dashed",
+			},
+		},
+		// StatLinReq produces intercept/slope suitable for GeomABLine
+		GeomMapping: nil,
 	}
+	plot.Layers = append(plot.Layers, &linReg)
+
+	ageLabel := Layer{
+		Name: "Age Label",
+		DataMapping: AesMapping{
+			"value": "Age",
+		},
+		Stat: &StatLabel{Format: "%.0f years"},
+		Geom: GeomText{
+			Style: AesMapping{
+				"color":  "blue",
+				"angle":  "45°",
+				"family": "Helvetica",
+			},
+		},
+		GeomMapping: nil,
+	}
+	plot.Layers = append(plot.Layers, &ageLabel)
+
+	histogram := Layer{
+		Name:        "Histogram",
+		DataMapping: AesMapping{"y": ""}, // clear mapping of y to Height
+		Stat:        &StatBin{Drop: true},
+		StatMapping: AesMapping{
+			"y": "count",
+		},
+		Geom: GeomBar{
+			Style: AesMapping{
+				"fill": "gray50",
+			},
+		},
+	}
+	plot.Layers = append(plot.Layers, &histogram)
+
+	// Set up the one panel.
+	plot.CreatePanels()
+	if len(plot.Panels) != 1 {
+		t.Fatalf("Got %d panel rows, expected 1.", len(plot.Panels))
+	}
+	if len(plot.Panels[0]) != 1 {
+		t.Fatalf("Got %d panel cols, expected 1.", len(plot.Panels[0]))
+	}
+	panel := plot.Panels[0][0]
 
 	// 2. PrepareData
-	plot.PrepareData()
-	if fields := plot.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
+	panel.PrepareData()
+	if fields := panel.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 0 DF has fields %v", fields)
 	}
-	if fields := plot.Layers[1].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
+	if fields := panel.Layers[1].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 1 DF has fields %v", fields)
 	}
-	if sx, ok := plot.Scales["x"]; !ok {
+	if sx, ok := panel.Scales["x"]; !ok {
 		t.Errorf("Missing x scale")
 	} else {
 		if sx.Discrete || sx.Transform != &IdentityScale || sx.Aesthetic != "x" {
 			t.Errorf("Scale x = %+v", sx)
 		}
 	}
-	if sy, ok := plot.Scales["y"]; !ok {
+	if sy, ok := panel.Scales["y"]; !ok {
 		t.Errorf("Missing y scale")
 	} else {
 		if sy.Discrete || sy.Transform != &IdentityScale || sy.Aesthetic != "y" {
@@ -153,51 +166,56 @@ func TestIndividualSteps(t *testing.T) {
 	}
 
 	// 3. ComputeStatistics
-	plot.ComputeStatistics()
+	panel.ComputeStatistics()
 
 	// No statistic on layer 0: data field is unchanges
-	if fields := plot.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
+	if fields := panel.Layers[0].Data.FieldNames(); !same(fields, []string{"x", "y"}) {
 		t.Errorf("Layer 0 DF has fields %v", fields)
 	}
 	// StatLinReq produces intercept and slope
-	if fields := plot.Layers[1].Data.FieldNames(); !same(fields, []string{"intercept", "slope", "interceptErr", "slopeErr"}) {
+	if fields := panel.Layers[1].Data.FieldNames(); !same(fields, []string{"intercept", "slope", "interceptErr", "slopeErr"}) {
 		t.Errorf("Layer 1 DF has fields %v", fields)
 	}
-	data := plot.Layers[1].Data
+	data := panel.Layers[1].Data
 	if data.N != 1 {
-		t.Errorf("Got %d data in lin req df.", plot.Layers[1].Data.N)
+		t.Errorf("Got %d data in lin req df.", panel.Layers[1].Data.N)
 	}
 	t.Logf("Intercept = %.2f   Slope = %.2f",
 		data.Columns["intercept"].Data[0],
 		data.Columns["slope"].Data[0])
 	// StatLabels produces labels
-	if fields := plot.Layers[2].Data.FieldNames(); !same(fields, []string{"x", "y", "text"}) {
-		t.Errorf("Layer 2 %q has fields %v", plot.Layers[3].Name, fields)
+	if fields := panel.Layers[2].Data.FieldNames(); !same(fields, []string{"x", "y", "text"}) {
+		t.Errorf("Layer 2 %q has fields %v", panel.Layers[3].Name, fields)
 	}
-	data = plot.Layers[2].Data
+	data = panel.Layers[2].Data
 	if data.N != 20 {
-		t.Errorf("Got %d data in label df.", plot.Layers[2].Data.N)
+		t.Errorf("Got %d data in label df.", panel.Layers[2].Data.N)
 	}
 	// StatBin produces bins
-	if fields := plot.Layers[3].Data.FieldNames(); !same(fields, []string{"x", "count", "ncount", "density", "ndensity"}) {
-		t.Errorf("Layer 3 %q has fields %v", plot.Layers[3].Name, fields)
+	if fields := panel.Layers[3].Data.FieldNames(); !same(fields, []string{"x", "count", "ncount", "density", "ndensity"}) {
+		t.Errorf("Layer 3 %q has fields %v", panel.Layers[3].Name, fields)
 	}
-	data = plot.Layers[3].Data
+	data = panel.Layers[3].Data
 	if data.N != 11 {
-		t.Errorf("Got %d data in binned df.", plot.Layers[3].Data.N)
+		t.Errorf("Got %d data in binned df.", panel.Layers[3].Data.N)
 	}
 
 	// 4. Wireing
-	plot.WireStatToGeom()
+	panel.WireStatToGeom()
+
+	for a, s := range panel.Scales {
+		fmt.Printf("====== Scale %s %q ========\n", a, s.Name)
+		fmt.Printf("%s\n", s.String())
+	}
 
 	// 5. Test Construct ConstructGeoms. This shouldn't change much as
 	// GeomABLine doesn't reparametrize and we don't do position adjustments.
-	plot.ConstructGeoms()
+	panel.ConstructGeoms()
 
 	// 6. FinalizeScales
-	plot.FinalizeScales()
+	panel.FinalizeScales()
 	// Only x and y are set up
-	if sx, ok := plot.Scales["x"]; !ok {
+	if sx, ok := panel.Scales["x"]; !ok {
 		t.Errorf("Missing x scale")
 	} else {
 		if sx.Pos == nil {
@@ -207,33 +225,26 @@ func TestIndividualSteps(t *testing.T) {
 			t.Errorf("Bad training: %f %f", sx.DomainMin, sx.DomainMax)
 		}
 	}
-	fmt.Printf("%s\n", plot.Scales["x"])
-	fmt.Printf("%s\n", plot.Scales["y"])
+	fmt.Printf("%s\n", panel.Scales["x"])
+	fmt.Printf("%s\n", panel.Scales["y"])
 
 	// 7. Render Geoms to Grobs using scales (Step7).
-	plot.RenderGeoms()
+	panel.RenderGeoms()
 	fmt.Println("Layer 0, raw data")
-	for _, grob := range plot.Layers[0].Grobs {
+	for _, grob := range panel.Layers[0].Grobs {
 		fmt.Println("  ", grob.String())
 	}
 	fmt.Println("Layer 1, linear regression")
-	for _, grob := range plot.Layers[1].Grobs {
+	for _, grob := range panel.Layers[1].Grobs {
 		fmt.Println("  ", grob.String())
 	}
 	fmt.Println("Layer 2, labels")
-	for _, grob := range plot.Layers[2].Grobs {
+	for _, grob := range panel.Layers[2].Grobs {
 		fmt.Println("  ", grob.String())
 	}
 	fmt.Println("Layer 3, histogram")
-	for _, grob := range plot.Layers[3].Grobs {
+	for _, grob := range panel.Layers[3].Grobs {
 		fmt.Println("  ", grob.String())
 	}
 
-	// 8. RenderVisuals
-	plot.RenderVisuals()
-
-	// 9. Output
-	plot.Output()
-
 }
-************************/
