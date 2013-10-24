@@ -40,10 +40,10 @@ func trainScales(p *Panel, data *DataFrame, spec string) {
 		}
 		fields := strings.Split(t[1], ",")
 		for _, field := range fields {
-			if !df.Has(field) {
+			if !data.Has(field) {
 				continue
 			}
-			scale.Train(df.Columns[field])
+			scale.Train(data.Columns[field])
 		}
 	}
 }

@@ -789,11 +789,3 @@ func (m AesMapping) Combine(ams ...AesMapping) AesMapping {
 	}
 	return merged
 }
-
-type Viewport struct {
-	// The underlying image
-
-	// The rectangel of this vp
-
-	// Functions to turn grob coordinates to pixel
-}
