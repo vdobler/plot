@@ -4,6 +4,7 @@ import (
 	"code.google.com/p/plotinum/vg"
 	"code.google.com/p/plotinum/vg/vgimg"
 	// "fmt"
+	"math"
 	"os"
 	"testing"
 )
@@ -85,6 +86,7 @@ func TestGrobs(t *testing.T) {
 		grob.Draw(innerVP)
 	}
 
+	// Draw lines with different styles and widths.
 	lines := []Grob{}
 	x, y = 0.1, 0.45
 	for lt := SolidLine; lt <= TwodashLine; lt++ {
@@ -107,6 +109,67 @@ func TestGrobs(t *testing.T) {
 	for _, grob := range lines {
 		grob.Draw(innerVP)
 	}
+
+	// Draw rectangles
+	rectVP := SubViewport(innerVP, 0.1, 0.7, 0.4, 0.3)
+	rect := []Grob{}
+	bgr := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray40"]}
+	bgr.Draw(rectVP)
+	x, y = 0.0, 0.0
+	w, h := 0.5, 0.5
+	for _, col := range cols {
+		g := GrobRect{
+			xmin: x,
+			ymin: y,
+			xmax: x + w,
+			ymax: y + h,
+			fill: BuiltinColors[col],
+		}
+		rect = append(rect, g)
+		x += w
+		y += h
+		w /= 2
+		h /= 2
+	}
+	for _, grob := range rect {
+		grob.Draw(rectVP)
+	}
+
+	// Draw path
+	pathVP := SubViewport(innerVP, 0.55, 0.7, 0.4, 0.3)
+	bgp := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray"]}
+	bgp.Draw(pathVP)
+	sin := make([]struct{ x, y float64 }, 50)
+	for i := range sin {
+		k := float64(i) / float64(len(sin)-1)
+		x = k * 2 * math.Pi
+		println(float64(i)/float64(len(sin)), x, math.Sin(x))
+		y = 0.4 * math.Sin(x)
+		sin[i].x = k
+		sin[i].y = 0.55 + y
+	}
+	g := GrobPath{
+		points:   sin,
+		size:     4,
+		linetype: SolidLine,
+		color:    BuiltinColors["white"],
+	}
+	g.Draw(pathVP)
+	cos := make([]struct{ x, y float64 }, 25)
+	for i := range cos {
+		k := float64(i) / float64(len(cos)-1)
+		x = k * 4 * math.Pi
+		y = 0.3 * math.Cos(x)
+		cos[i].x = k
+		cos[i].y = 0.45 + y
+	}
+	g = GrobPath{
+		points:   cos,
+		size:     2,
+		linetype: DottedLine,
+		color:    BuiltinColors["green"],
+	}
+	g.Draw(pathVP)
 
 	pngCanvas.WriteTo(file)
 	file.Close()
