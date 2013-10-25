@@ -33,9 +33,6 @@ func (point GrobPoint) Draw(vp Viewport) {
 	s := vg.Points(point.size)
 	var p vg.Path
 
-	fmt.Printf("Point at %.0f,%.0f size %.1f (%.2f,%.2f)\n",
-		x, y, s, point.x, point.y)
-
 	draw := vp.Canvas.Stroke
 	if point.shape >= SolidCirclePoint && point.shape <= SolidNablaPoint {
 		draw = vp.Canvas.Fill
@@ -132,11 +129,11 @@ var _ Grob = GrobLine{}
 var dashLength = [][]vg.Length{
 	[]vg.Length{1},
 	[]vg.Length{10},
-	[]vg.Length{10, 10},
-	[]vg.Length{5, 4},
-	[]vg.Length{10, 4, 5, 4},
-	[]vg.Length{20, 10},
-	[]vg.Length{10, 10, 20, 10},
+	[]vg.Length{10, 8},
+	[]vg.Length{4, 4},
+	[]vg.Length{10, 4, 4, 4},
+	[]vg.Length{10, 3},
+	[]vg.Length{10, 2, 4, 2},
 }
 
 func (line GrobLine) Draw(vp Viewport) {
@@ -229,12 +226,14 @@ func (text GrobText) Draw(vp Viewport) {
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(text.color)
 	x, y := vp.X(text.x), vp.Y(text.y)
-	vp.Canvas.Translate(x, y)
-	vp.Canvas.Rotate(text.angle)
 	font, err := vg.MakeFont("Courier", vg.Points(text.size))
 	if err != nil {
 		panic(err.Error())
 	}
+	dx := font.Width(text.text) * vg.Length(text.hjust)
+	dy := font.Extents().Ascent * vg.Length(text.vjust)
+	vp.Canvas.Translate(x-dx, y-dy)
+	vp.Canvas.Rotate(text.angle)
 	vp.Canvas.FillString(font, 0, 0, text.text)
 	vp.Canvas.Pop()
 }
