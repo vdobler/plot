@@ -50,6 +50,7 @@ type PointShape int
 
 const (
 	BlankPoint PointShape = iota
+	DotPoint
 	CirclePoint
 	SquarePoint
 	DiamondPoint
@@ -65,7 +66,7 @@ const (
 	StarPoint
 )
 
-var shapeNames = []string{"blank", "circle", "square", "diamond", "delta", "nabla",
+var shapeNames = []string{"blank", "dot", "circle", "square", "diamond", "delta", "nabla",
 	"solidcircle", "solidsquare", "soliddiamond", "soliddelta", "solidnabla",
 	"cross", "plus", "star"}
 

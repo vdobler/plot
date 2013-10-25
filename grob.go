@@ -26,14 +26,15 @@ type GrobPoint struct {
 var _ Grob = GrobPoint{}
 
 func (point GrobPoint) Draw(vp Viewport) {
+	vp.Canvas.Push()
 	vp.Canvas.SetColor(point.color)
 	vp.Canvas.SetLineWidth(1)
 	x, y := vp.X(point.x), vp.Y(point.y)
 	s := vg.Points(point.size)
 	var p vg.Path
 
-	fmt.Printf("Point at %.0f,%.0f size %.1f\n",
-		x, y, s)
+	fmt.Printf("Point at %.0f,%.0f size %.1f (%.2f,%.2f)\n",
+		x, y, s, point.x, point.y)
 
 	draw := vp.Canvas.Stroke
 	if point.shape >= SolidCirclePoint && point.shape <= SolidNablaPoint {
@@ -43,8 +44,13 @@ func (point GrobPoint) Draw(vp Viewport) {
 	switch point.shape {
 	case BlankPoint:
 		return
+	case DotPoint:
+		dpi := vp.Canvas.DPI()
+		p.Arc(x, y, vg.Inches(1/dpi), 0, 2*math.Pi)
+		p.Close()
+		vp.Canvas.Fill(p)
 	case CirclePoint, SolidCirclePoint:
-		p.Arc(x, x, vg.Points(point.size), 0, 2*math.Pi)
+		p.Arc(x, y, vg.Points(point.size), 0, 2*math.Pi)
 		p.Close()
 		draw(p)
 	case SquarePoint, SolidSquarePoint:
@@ -59,6 +65,20 @@ func (point GrobPoint) Draw(vp Viewport) {
 		p.Line(x+s, y)
 		p.Line(x, y+s)
 		p.Line(x-s, y)
+		p.Close()
+		draw(p)
+	case DeltaPoint, SolidDeltaPoint:
+		ss := 0.57735 * s
+		p.Move(x, y+2*ss)
+		p.Line(x-s, y-ss)
+		p.Line(x+s, y-ss)
+		p.Close()
+		draw(p)
+	case NablaPoint, SolidNablaPoint:
+		ss := 0.57735 * s
+		p.Move(x, y-2*ss)
+		p.Line(x-s, y+ss)
+		p.Line(x+s, y+ss)
 		p.Close()
 		draw(p)
 	case CrossPoint:
@@ -88,6 +108,7 @@ func (point GrobPoint) Draw(vp Viewport) {
 	default:
 		println("Implement Draw for points " + point.shape.String())
 	}
+	vp.Canvas.Pop()
 }
 
 func (point GrobPoint) String() string {
@@ -285,21 +306,34 @@ type Viewport struct {
 	Canvas                vg.Canvas
 }
 
+func (vp Viewport) String() string {
+	return fmt.Sprintf("%.2f x %.2f + %.2f + %.2f (inches)",
+		vp.X0.Inches(), vp.Y0.Inches(), vp.Width.Inches(), vp.Height.Inches())
+}
+
 // SubViewport returns the area described by x0,y0,width,height in
 // natural grob coordinates [0,1] as a viewport.
-func SubVieport(vp Viewport, x0, y0, width, height float64) Viewport {
-	return Viewport{
+func SubViewport(vp Viewport, x0, y0, width, height float64) Viewport {
+	sub := Viewport{
 		X0:     vp.X0 + vg.Length(x0)*vp.Width,
 		Y0:     vp.Y0 + vg.Length(y0)*vp.Height,
 		Width:  vg.Length(width) * vp.Width,
 		Height: vg.Length(height) * vp.Height,
 		Canvas: vp.Canvas,
 	}
+
+	fmt.Printf("SubVieport(width=%.2f) Width=%.2fin\n", width, sub.Width.Inches())
+	return sub
 }
 
 // X and Y turn natural grob coordinates [0,1] to canvas lengths.
-func (vp Viewport) X(x float64) vg.Length { return vp.X0 + vg.Length(x)*vp.Width }
+func (vp Viewport) X(x float64) vg.Length {
+	ans := vp.X0 + vg.Length(x)*vp.Width
+	// fmt.Printf("X( %.3f ) = %.1fin\n", x, ans.Inches())
+	return ans
+}
 func (vp Viewport) Y(y float64) vg.Length {
 	ans := vp.Y0 + vg.Length(y)*vp.Height
+	// fmt.Printf("Y( %.3f ) = %.1fin\n", y, ans.Inches())
 	return ans
 }
