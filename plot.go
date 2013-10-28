@@ -748,8 +748,8 @@ func (plot *Plot) Layout(v Viewport) {
 	plot.Viewport["Title"] = SubViewport(v, 0, 0.95, 1, 0.05)
 	plot.Viewport["Col-Labels"] = SubViewport(v, 0, 0.9, 1, 0.05)
 	plot.Viewport["Row-Labels"] = SubViewport(v, 0.85, 0.1, 0.05, 0.08)
-	plot.Viewport["X-Label"] = SubViewport(v, 0, 0.1, 0.75, 0.05)
-	plot.Viewport["Y-Label"] = SubViewport(v, 0, 0.1, 0.8, 0.05)
+	plot.Viewport["X-Label"] = SubViewport(v, 0.1, 0, 0.75, 0.05)
+	plot.Viewport["Y-Label"] = SubViewport(v, 0, 0.1, 0.1, 0.8)
 
 	nrows := len(plot.Panels)
 	ncols := len(plot.Panels[0])
@@ -761,8 +761,8 @@ func (plot *Plot) Layout(v Viewport) {
 	for r := 0; r < nrows; r++ {
 		for c := 0; c < ncols; c++ {
 			panelId := fmt.Sprintf("Panel-%d-%d", r, c)
-			x := float64(c) * (pwidth + sepx)
-			y := float64(r) * (pheight + sepy)
+			x := 0.1 + float64(c)*(pwidth+sepx)
+			y := 0.1 + float64(r)*(pheight+sepy)
 			plot.Viewport[panelId] = SubViewport(v, x, y, pwidth, pheight)
 		}
 	}
@@ -779,26 +779,27 @@ func (plot *Plot) RenderVisuals() {
 	}
 
 	if name := plot.Scales["x"].Name; name != "" {
-		t := GrobText{x: 0.5, y: 0, vjust: 0, hjust: 0.5, text: name}
+		t := GrobText{x: 0.5, y: 0.1, vjust: 0, hjust: 0.5, text: name}
 		t.Draw(plot.Viewport["X-Label"])
 	}
 
 	if name := plot.Scales["y"].Name; name != "" {
-		t := GrobText{x: 0, y: 0.5, vjust: 0, hjust: 0.5, text: name, angle: math.Pi / 2}
+		t := GrobText{x: 0.1, y: 0.5, vjust: 0.5, hjust: 0.5, text: name, angle: math.Pi / 2}
 		t.Draw(plot.Viewport["Y-Label"])
 	}
 
+	showX, showY := false, false
 	for r := range plot.Panels {
+		showX = r+1 == len(plot.Panels)
 		for c, panel := range plot.Panels[r] {
+			showY = c == 0
 			panelId := fmt.Sprintf("Panel-%d-%d", r, c)
-			panel.Draw(plot.Viewport[panelId])
+			panel.Draw(plot.Viewport[panelId], showX, showY)
 		}
 	}
-
-	// TODO: the scales themself
 }
 
-func (panel *Panel) Draw(vp Viewport) {
+func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 	// Draw the background first.
 	panelBG := MergeStyles(panel.Plot.Theme.PanelBG, DefaultTheme.PanelBG)
 	// TODO: how to _not_ draw something?
@@ -817,19 +818,36 @@ func (panel *Panel) Draw(vp Viewport) {
 	sy := panel.Scales["y"]
 	major := MergeStyles(panel.Plot.Theme.GridMajor, DefaultTheme.GridMajor)
 	// TODO minor := MergeStyles(panel.Plot.Theme.GridMinor, DefaultTheme.GridMinor)
-	for _, x := range sx.Breaks {
+	for i, x := range sx.Breaks {
 		xv := sx.Pos(x)
 		GrobLine{x0: xv, y0: 0, x1: xv, y1: 1,
 			linetype: String2LineType(major["linetype"]),
 			size:     String2Float(major["size"], 0, 20),
 			color:    String2Color(major["color"])}.Draw(vp)
+		if !showX {
+			continue
+		}
+		GrobLine{x0: xv, y0: 0, x1: xv, y1: -0.02,
+			linetype: SolidLine,
+			size:     1,
+			color:    BuiltinColors["gray"]}.Draw(vp)
+		GrobText{x: xv, y: -0.02, hjust: 0.5, vjust: 1, text: sx.Labels[i],
+			size:  12,
+			color: BuiltinColors["gray20"]}.Draw(vp)
 	}
-	for _, y := range sy.Breaks {
+	for i, y := range sy.Breaks {
 		yv := sy.Pos(y)
 		GrobLine{x0: 0, y0: yv, x1: 1, y1: yv,
 			linetype: String2LineType(major["linetype"]),
 			size:     String2Float(major["size"], 0, 20),
 			color:    String2Color(major["color"])}.Draw(vp)
+		GrobLine{x0: 0, y0: yv, x1: -0.02, y1: yv,
+			linetype: SolidLine,
+			size:     1,
+			color:    BuiltinColors["gray"]}.Draw(vp)
+		GrobText{x: -0.02, y: yv, hjust: 1, vjust: 0.5, text: sy.Labels[i],
+			size:  12,
+			color: BuiltinColors["gray20"]}.Draw(vp)
 	}
 
 	// Draw the layers.

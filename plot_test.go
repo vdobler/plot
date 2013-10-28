@@ -306,6 +306,6 @@ func TestSimplePlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%", err)
 	}
-	plot.Draw(vg.Inches(10), vg.Inches(8), file)
+	plot.Draw(vg.Inches(10), vg.Inches(7), file)
 	file.Close()
 }

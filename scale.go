@@ -333,7 +333,7 @@ func (s *Scale) PrepareLabels() {
 
 // TODO: Much more logic needed
 func (s *Scale) ChooseFloatFormatter() func(x float64) string {
-	f := "%d"
+	f := "%.1f"
 	if math.Abs(s.Breaks[0]) < 1 || math.Abs(s.Breaks[len(s.Breaks)-1]) < 1 {
 		f = "%.1f" // BUG
 	}
