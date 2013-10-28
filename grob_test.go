@@ -3,13 +3,13 @@ package plot
 import (
 	"code.google.com/p/plotinum/vg"
 	"code.google.com/p/plotinum/vg/vgimg"
-	// "fmt"
+	"fmt"
 	"math"
 	"os"
 	"testing"
 )
 
-func TestGrobs(t *testing.T) {
+func TestGraphicGrobs(t *testing.T) {
 	// Output
 	file, err := os.Create("grobs.png")
 	if err != nil {
@@ -170,6 +170,75 @@ func TestGrobs(t *testing.T) {
 		color:    BuiltinColors["green"],
 	}
 	g.Draw(pathVP)
+
+	pngCanvas.WriteTo(file)
+	file.Close()
+}
+
+func drawTextGrid(vp Viewport, angle float64) {
+	black := BuiltinColors["black"]
+	white := BuiltinColors["white"]
+	println(angle)
+	GrobLine{x0: 0, y0: 0, x1: 1, y1: 0, size: 1, linetype: SolidLine, color: white}.Draw(vp)
+	GrobLine{x0: 0, y0: 0.5, x1: 1, y1: 0.5, size: 1, linetype: SolidLine, color: white}.Draw(vp)
+	GrobLine{x0: 0, y0: 1, x1: 1, y1: 1, size: 1, linetype: SolidLine, color: white}.Draw(vp)
+	GrobLine{x0: 0, y0: 0, x1: 0, y1: 1, size: 1, linetype: SolidLine, color: white}.Draw(vp)
+	GrobLine{x0: 0.5, y0: 0, x1: 0.5, y1: 1, size: 1, linetype: SolidLine, color: white}.Draw(vp)
+	GrobLine{x0: 1, y0: 0, x1: 1, y1: 1, size: 1, linetype: SolidLine, color: white}.Draw(vp)
+
+	for _, vjust := range []float64{0, 0.5, 1} {
+		size := 10.0 + 4*vjust
+		for _, hjust := range []float64{0, 0.5, 1} {
+			fname := ""
+			if hjust == 0.5 {
+				fname = "Helvetica-Bold"
+			} else if hjust == 1 {
+				fname = "Times-Bold"
+			}
+			t := GrobText{
+				x:     hjust,
+				y:     vjust,
+				text:  fmt.Sprintf("%.1f/%.1f", hjust, vjust),
+				size:  size,
+				color: black,
+				vjust: vjust,
+				hjust: hjust,
+				angle: angle,
+				font:  fname,
+			}
+			t.Draw(vp)
+		}
+	}
+}
+
+func TestTextGrobs(t *testing.T) {
+	// Output
+	file, err := os.Create("text.png")
+	if err != nil {
+		t.Fatalf("%", err)
+	}
+
+	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(vg.Inches(10), vg.Inches(8))}
+	vg.Initialize(pngCanvas)
+
+	allVP := Viewport{
+		X0:     0,
+		Y0:     0,
+		Width:  vg.Inches(10),
+		Height: vg.Inches(8),
+		Canvas: pngCanvas,
+	}
+	bg := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray60"]}
+	bg.Draw(allVP)
+
+	gridVP := SubViewport(allVP, 0.1, 0.1, 0.35, 0.35)
+	drawTextGrid(gridVP, 0)
+	gridVP = SubViewport(allVP, 0.55, 0.1, 0.35, 0.35)
+	drawTextGrid(gridVP, 30./180*math.Pi)
+	gridVP = SubViewport(allVP, 0.1, 0.55, 0.35, 0.35)
+	drawTextGrid(gridVP, 45./180*math.Pi)
+	gridVP = SubViewport(allVP, 0.55, 0.55, 0.35, 0.35)
+	drawTextGrid(gridVP, 90./180*math.Pi)
 
 	pngCanvas.WriteTo(file)
 	file.Close()

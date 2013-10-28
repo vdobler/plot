@@ -215,9 +215,9 @@ type GrobText struct {
 	color color.Color
 	angle float64
 
-	family, fontface string
-	vjust, hjust     float64
-	lineheight       float64
+	font         string
+	vjust, hjust float64
+	lineheight   float64
 }
 
 var _ Grob = GrobText{}
@@ -226,12 +226,25 @@ func (text GrobText) Draw(vp Viewport) {
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(text.color)
 	x, y := vp.X(text.x), vp.Y(text.y)
-	font, err := vg.MakeFont("Courier", vg.Points(text.size))
+	fname := text.font
+	if fname == "" {
+		fname = "Courier-Bold"
+	}
+	font, err := vg.MakeFont(fname, vg.Points(text.size))
 	if err != nil {
 		panic(err.Error())
 	}
-	dx := font.Width(text.text) * vg.Length(text.hjust)
-	dy := font.Extents().Ascent * vg.Length(text.vjust)
+
+	// Compute width ww and height hh of the rotateted bounding box.
+	w := font.Width(text.text)
+	h := font.Extents().Ascent
+	s := math.Sin(text.angle)
+	z := vg.Length(math.Sqrt(1 - s*s))
+	ww := w*z + h*vg.Length(s)
+	hh := w*vg.Length(s) + h*z
+
+	dx := ww * vg.Length(text.hjust)
+	dy := hh * vg.Length(text.vjust)
 	vp.Canvas.Translate(x-dx, y-dy)
 	vp.Canvas.Rotate(text.angle)
 	vp.Canvas.FillString(font, 0, 0, text.text)
@@ -253,8 +266,7 @@ func (text GrobText) String() string {
 		just += "b"
 	}
 
-	fnt := fmt.Sprintf("%s/%s/%.0f", strings.Replace(text.family, " ", "-", -1),
-		text.fontface, text.lineheight)
+	fnt := fmt.Sprintf("%s/%.0f", text.font, text.lineheight)
 
 	return fmt.Sprintf("Text(%.3f,%.3f %q %s %.0f° %s %q)",
 		text.x, text.y, text.text, Color2String(text.color),
