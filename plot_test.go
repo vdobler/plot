@@ -1,29 +1,13 @@
 package plot
 
 import (
+	"code.google.com/p/plotinum/vg"
 	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
 	"os"
 	"testing"
 )
-
-func TestFaceting(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
-
-	fac := Faceting{
-		Columns: "Group",
-		Rows:    "Origin",
-		Totals:  true,
-	}
-
-	p := Plot{
-		Data:     df,
-		Faceting: fac,
-	}
-
-	p.Draw()
-}
 
 func TestStatBin(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
@@ -281,4 +265,47 @@ func TestIndividualSteps(t *testing.T) {
 	pngCanvas.WriteTo(file)
 	file.Close()
 
+}
+
+func TestSimplePlot(t *testing.T) {
+	aes := AesMapping{
+		"x": "Height",
+		"y": "Weight",
+	}
+	plot, err := NewPlot(measurement, aes)
+	if err != nil {
+		t.Fatalf("Unxpected error: %s", err)
+	}
+	plot.Title = "Sample 12.3"
+
+	rawData := Layer{
+		Name: "Raw Data",
+		Stat: nil, // identity
+		Geom: GeomPoint{
+			Style: AesMapping{
+				"color": "red",
+				"shape": "diamond",
+			}}}
+	plot.Layers = append(plot.Layers, &rawData)
+
+	linReg := Layer{
+		Name: "Linear regression",
+		Stat: &StatLinReq{},
+		Geom: GeomABLine{
+			Style: AesMapping{
+				"color":    "green",
+				"linetype": "dashed",
+			},
+		},
+		// StatLinReq produces intercept/slope suitable for GeomABLine
+		GeomMapping: nil,
+	}
+	plot.Layers = append(plot.Layers, &linReg)
+
+	file, err := os.Create("simple.png")
+	if err != nil {
+		t.Fatalf("%", err)
+	}
+	plot.Draw(vg.Inches(10), vg.Inches(8), file)
+	file.Close()
 }

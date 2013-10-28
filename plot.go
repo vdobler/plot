@@ -1,8 +1,11 @@
 package plot
 
 import (
+	"code.google.com/p/plotinum/vg"
+	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
+	"io"
 	"math"
 	"sort"
 	"strings"
@@ -15,6 +18,9 @@ var floor = math.Floor
 
 // Plot represents a whole plot.
 type Plot struct {
+	// The title of the plot.
+	Title string
+
 	// Data is the data to draw.
 	Data *DataFrame
 
@@ -37,7 +43,11 @@ type Plot struct {
 	// Panels are the different panels for faceting
 	Panels [][]*Panel
 
+	// Theme contains the visual defaults to use when drawing things.
 	Theme Theme
+
+	// Layout maps components like "Title" or "Y-Label" to their viewport.
+	Viewport map[string]Viewport
 }
 
 func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
@@ -110,7 +120,12 @@ type Panel struct {
 	// Layers contains all the layers displayed in the plot.
 	Layers []*Layer
 
+	// Scales contains the scales for this panel. Normaly all panels
+	// share all scales, but x and y might be free on faceted plots.
 	Scales map[string]*Scale
+
+	// Viewport
+	Viewport Viewport
 }
 
 // Facetting describes the facetting to use. The zero value indicates
@@ -531,7 +546,7 @@ func (p *Panel) RenderGeoms() {
 // Plot drawing
 
 // Draw generates all parts of the plot and renders the output.
-func (plot *Plot) Draw() {
+func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 	plot.CreatePanels()
 
 	for r := range plot.Panels {
@@ -578,14 +593,28 @@ func (plot *Plot) Draw() {
 		}
 	}
 
+	// TODO: Maybe nicer: render everything to grobs, compute
+	// bounding box for GrobText, use this to layout stuff
+	// draw everything.
+
+	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(width, height)}
+	vg.Initialize(pngCanvas)
+
+	globalVP := Viewport{
+		X0:     0,
+		Y0:     0,
+		Width:  width,
+		Height: height,
+		Canvas: pngCanvas,
+	}
+	plot.Layout(globalVP)
+
 	// Render rest of elements (guides, titels, factting, ...)
 	// Step 8
 	plot.RenderVisuals()
 
-	// Have each grob be pixeled into output.
-	// Step 9
-	plot.Output()
-
+	// Output everythign to w
+	pngCanvas.WriteTo(out)
 }
 
 // -------------------------------------------------------------------------
@@ -709,15 +738,106 @@ func (p *Plot) createGridPanels() {
 }
 
 // -------------------------------------------------------------------------
-// Step 8: Render remaining parts of plot
+// Layouting
 
-func (plot *Plot) RenderVisuals() {
+// Layout computes suitable viewports for the different components.
+func (plot *Plot) Layout(v Viewport) {
+	plot.Viewport = make(map[string]Viewport)
+
+	// Lets use a fixed layout.
+	plot.Viewport["Title"] = SubViewport(v, 0, 0.95, 1, 0.05)
+	plot.Viewport["Col-Labels"] = SubViewport(v, 0, 0.9, 1, 0.05)
+	plot.Viewport["Row-Labels"] = SubViewport(v, 0.85, 0.1, 0.05, 0.08)
+	plot.Viewport["X-Label"] = SubViewport(v, 0, 0.1, 0.75, 0.05)
+	plot.Viewport["Y-Label"] = SubViewport(v, 0, 0.1, 0.8, 0.05)
+
+	nrows := len(plot.Panels)
+	ncols := len(plot.Panels[0])
+	sepx := 0.02
+	sepy := 0.02
+	pwidth := (0.75 - sepx*float64(ncols-1)) / float64(ncols)
+	pheight := (0.8 - sepy*float64(nrows-1)) / float64(nrows)
+
+	for r := 0; r < nrows; r++ {
+		for c := 0; c < ncols; c++ {
+			panelId := fmt.Sprintf("Panel-%d-%d", r, c)
+			x := float64(c) * (pwidth + sepx)
+			y := float64(r) * (pheight + sepy)
+			plot.Viewport[panelId] = SubViewport(v, x, y, pwidth, pheight)
+		}
+	}
 }
 
 // -------------------------------------------------------------------------
-// Step 9: Output
+// Step 8: Render remaining parts of plot
 
-func (plot *Plot) Output() {
+func (plot *Plot) RenderVisuals() {
+	// Title
+	if plot.Title != "" {
+		t := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: plot.Title}
+		t.Draw(plot.Viewport["Title"])
+	}
+
+	if name := plot.Scales["x"].Name; name != "" {
+		t := GrobText{x: 0.5, y: 0, vjust: 0, hjust: 0.5, text: name}
+		t.Draw(plot.Viewport["X-Label"])
+	}
+
+	if name := plot.Scales["y"].Name; name != "" {
+		t := GrobText{x: 0, y: 0.5, vjust: 0, hjust: 0.5, text: name, angle: math.Pi / 2}
+		t.Draw(plot.Viewport["Y-Label"])
+	}
+
+	for r := range plot.Panels {
+		for c, panel := range plot.Panels[r] {
+			panelId := fmt.Sprintf("Panel-%d-%d", r, c)
+			panel.Draw(plot.Viewport[panelId])
+		}
+	}
+
+	// TODO: the scales themself
+}
+
+func (panel *Panel) Draw(vp Viewport) {
+	// Draw the background first.
+	panelBG := MergeStyles(panel.Plot.Theme.PanelBG, DefaultTheme.PanelBG)
+	// TODO: how to _not_ draw something?
+	GrobRect{
+		xmin: 0, ymin: 0,
+		xmax: 1, ymax: 1,
+		fill: String2Color(panelBG["fill"])}.Draw(vp)
+	points := []struct{ x, y float64 }{{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}
+	GrobPath{points: points,
+		linetype: String2LineType(panelBG["linetype"]),
+		size:     String2Float(panelBG["size"], 0, 20),
+		color:    String2Color(panelBG["color"])}.Draw(vp)
+
+	// Draw grid lines.
+	sx := panel.Scales["x"]
+	sy := panel.Scales["y"]
+	major := MergeStyles(panel.Plot.Theme.GridMajor, DefaultTheme.GridMajor)
+	// TODO minor := MergeStyles(panel.Plot.Theme.GridMinor, DefaultTheme.GridMinor)
+	for _, x := range sx.Breaks {
+		xv := sx.Pos(x)
+		GrobLine{x0: xv, y0: 0, x1: xv, y1: 1,
+			linetype: String2LineType(major["linetype"]),
+			size:     String2Float(major["size"], 0, 20),
+			color:    String2Color(major["color"])}.Draw(vp)
+	}
+	for _, y := range sy.Breaks {
+		yv := sy.Pos(y)
+		GrobLine{x0: 0, y0: yv, x1: 1, y1: yv,
+			linetype: String2LineType(major["linetype"]),
+			size:     String2Float(major["size"], 0, 20),
+			color:    String2Color(major["color"])}.Draw(vp)
+	}
+
+	// Draw the layers.
+	for _, layer := range panel.Layers {
+		for _, g := range layer.Grobs {
+			g.Draw(vp)
+		}
+	}
 }
 
 // -------------------------------------------------------------------------
