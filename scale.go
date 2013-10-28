@@ -282,8 +282,6 @@ func (s *Scale) PrepareContinousBreaks(min, max float64, num int) {
 	mag := math.Pow10(int(math.Floor(math.Log10(delta))))
 	f := delta / mag
 
-	println("AAA: ", min, max, fullRange, "\n  ", delta, mag, f)
-
 	step := 0.0
 
 	switch {
@@ -302,9 +300,7 @@ func (s *Scale) PrepareContinousBreaks(min, max float64, num int) {
 	step *= mag
 
 	x := math.Ceil(min/step) * step
-	println("BBB: ", x, step, mag)
 	for x < s.DomainMax {
-		println("  added", x)
 		s.Breaks = append(s.Breaks, x)
 		x += step
 	}

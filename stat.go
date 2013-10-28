@@ -200,7 +200,7 @@ func (s *StatLinReq) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	sy, sx := float64(0), float64(0)
 	for i := 0; i < data.N; i++ {
 		x := xc[i]
-		y := xc[i]
+		y := yc[i]
 		dx := x - xm
 		sx += dx * dx
 		sy += dx * (y - ym)
@@ -209,6 +209,8 @@ func (s *StatLinReq) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	s.B = sy / sx
 	s.A = ym - s.B*xm
 	aErr, bErr := s.A*0.2, s.B*0.1 // BUG
+	// See http://en.wikipedia.org/wiki/Simple_linear_regression#Normality_assumption
+	// for convidance intervalls of A and B.
 
 	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name))
 	result.N = 1
