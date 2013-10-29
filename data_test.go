@@ -75,7 +75,8 @@ var measurement = []Obs{
 }
 
 func TestNewDataFrame(t *testing.T) {
-	df, err := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, err := NewDataFrameFrom(measurement, pool)
 	if err != nil {
 		t.Fatalf("Unexpected error %s", err)
 	}
@@ -90,7 +91,8 @@ func TestNewDataFrame(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, _ := NewDataFrameFrom(measurement, pool)
 
 	exactly20 := Filter(df, "Age", 20)
 	if exactly20.N != 5 {
@@ -117,7 +119,7 @@ func TestFilter(t *testing.T) {
 		t.Errorf("Got %d, want 4", ukOnly.N)
 	}
 	originField := ukOnly.Columns["Origin"]
-	ukIdx := originField.StrIdx("uk")
+	ukIdx := originField.Pool.Find("uk")
 	for i, o := range ukOnly.Columns["Origin"].Data {
 		if int(o) != ukIdx || originField.String(o) != "uk" {
 			t.Errorf("Element %d: Got %.1f %q, want %d \"uk\"", i, o, originField.String(o), ukIdx)
@@ -138,7 +140,8 @@ func TestFilter(t *testing.T) {
 }
 
 func TestLevels(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, _ := NewDataFrameFrom(measurement, pool)
 	ageLevels := Levels(df, "Age").Elements()
 	if len(ageLevels) != 10 || ageLevels[0] != 20 || ageLevels[9] != 47 {
 		t.Errorf("Got %v", ageLevels)
@@ -157,7 +160,8 @@ func TestLevels(t *testing.T) {
 }
 
 func TestMinMax(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, _ := NewDataFrameFrom(measurement, pool)
 
 	min, max, a, b := MinMax(df, "Weight")
 	if min != 55 || a != 18 {
@@ -169,14 +173,16 @@ func TestMinMax(t *testing.T) {
 }
 
 func TestDataFrameCopy(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, _ := NewDataFrameFrom(measurement, pool)
 
 	cp := df.Copy()
 	cp.Print(os.Stdout)
 }
 
 func TestPrint(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, _ := NewDataFrameFrom(measurement, pool)
 	df.Print(os.Stdout)
 }
 

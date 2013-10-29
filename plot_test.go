@@ -10,7 +10,8 @@ import (
 )
 
 func TestStatBin(t *testing.T) {
-	df, _ := NewDataFrameFrom(measurement)
+	pool := NewStringPool()
+	df, _ := NewDataFrameFrom(measurement, pool)
 	sb := StatBin{BinWidth: 2, Drop: true}
 	df.Rename("BMI", "x")
 	bined := sb.Apply(df, nil)

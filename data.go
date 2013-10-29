@@ -13,10 +13,167 @@ import (
 
 var m = math.Floor
 
+// -------------------------------------------------------------------------
+// Field Types
+
+// FieldType represents the basisc type of a field.
+type FieldType uint
+
+const (
+	Int FieldType = iota
+	Float
+	String
+	Time
+	Vector
+)
+
+// Discrete returns true if ft is a descrete type.
+func (ft FieldType) Discrete() bool {
+	return ft == Int || ft == String
+}
+
+// Strings representation of ft.
+func (ft FieldType) String() string {
+	return []string{"Int", "Float", "String", "Time", "Vector"}[ft]
+}
+
+func isTime(x reflect.Type) bool {
+	return x.PkgPath() == "time" && x.Kind() == reflect.Struct && x.Name() == "Time"
+}
+
+// -------------------------------------------------------------------------
+// Field
+
+// Field represents a column in a data frame.
+type Field struct {
+	Type   FieldType
+	Data   []float64
+	Pool   *StringPool
+	Origin int64
+}
+
+func NewField(n int, t FieldType, pool *StringPool) Field {
+	f := Field{
+		Type:   t,
+		Origin: 0,
+		Data:   make([]float64, n),
+		Pool:   pool,
+	}
+	return f
+}
+
+func (f Field) Copy() Field {
+	c := f.CopyMeta()
+	c.Data = make([]float64, len(f.Data))
+	copy(c.Data, f.Data)
+	return c
+}
+
+func (f Field) CopyMeta() Field {
+	c := Field{
+		Type:   f.Type,
+		Origin: f.Origin,
+		Data:   nil,
+		Pool:   f.Pool,
+	}
+	return c
+}
+
+// Const return a copy of f with length n and a constant value of x.
+// TODO: Ugly.
+func (f Field) Const(x float64, n int) Field {
+	c := Field{
+		Type:   f.Type,
+		Origin: f.Origin,
+		Data:   make([]float64, n),
+		Pool:   f.Pool,
+	}
+	for i := range c.Data {
+		c.Data[i] = x
+	}
+	return c
+}
+
+func (f Field) Apply(t func(float64) float64) {
+	if f.Type == String {
+		panic("Cannot apply function to String column.")
+	}
+
+	for i, v := range f.Data {
+		f.Data[i] = t(v)
+	}
+}
+
+func (f Field) Discrete() bool { return f.Type.Discrete() }
+
+func (f Field) Int(x float64) int64 {
+	return int64(x) + f.Origin
+}
+
+func (f Field) AsInt() []int64 {
+	ret := make([]int64, len(f.Data))
+	for i, x := range f.Data {
+		ret[i] = f.Int(x)
+	}
+	return ret
+}
+
+func (f Field) String(x float64) string {
+	switch f.Type {
+	case Float:
+		return fmt.Sprintf("%f", x)
+	case Int:
+		return fmt.Sprintf("%d", f.Int(x))
+	case Time:
+		return f.Time(x).Format("2006-01-02 15:04:05")
+	case String:
+		i := int(x)
+		if i >= 0 && i < len(f.Pool.pool) {
+			return f.Pool.pool[i]
+		}
+		return "--NA--"
+	}
+	panic("Oooops")
+}
+
+func (f Field) Strings(x []float64) []string {
+	ans := []string{}
+	for _, v := range x {
+		ans = append(ans, f.String(v))
+	}
+	return ans
+}
+
+func (f Field) AsString() []string {
+	ret := make([]string, len(f.Data))
+	for i, x := range f.Data {
+		ret[i] = f.String(x)
+	}
+	return ret
+}
+
+func (f Field) Time(x float64) time.Time {
+	n := int64(x) + f.Origin
+	return time.Unix(n, 0)
+}
+
+func (f Field) AsTime() []time.Time {
+	ret := make([]time.Time, len(f.Data))
+	for i, x := range f.Data {
+		ret[i] = f.Time(x)
+	}
+	return ret
+}
+
+// -------------------------------------------------------------------------
+// Data Frames
+
+// DataFrame is a collection of same-length columns.
 type DataFrame struct {
 	Name    string
 	N       int
 	Columns map[string]Field
+	Pool    *StringPool
 }
 
 func (df *DataFrame) Has(field string) bool {
@@ -41,67 +198,6 @@ func (df *DataFrame) Append(a *DataFrame) {
 	}
 }
 
-type Field struct {
-	Type   FieldType
-	Str    []string // contains the string values
-	Origin int64
-	Data   []float64
-}
-
-func NewField(n int) Field {
-	f := Field{
-		Type:   0,
-		Str:    nil,
-		Origin: 0,
-		Data:   make([]float64, n),
-	}
-	return f
-}
-
-func (f Field) Copy() Field {
-	c := f.CopyMeta()
-	c.Data = make([]float64, len(f.Data))
-	copy(c.Data, f.Data)
-	return c
-}
-
-func (f Field) CopyMeta() Field {
-	c := Field{
-		Type:   f.Type,
-		Origin: f.Origin,
-		Str:    make([]string, len(f.Str)),
-		Data:   nil,
-	}
-	copy(c.Str, f.Str)
-	return c
-}
-
-// Const return a copy of f with length n and a constant value of.
-// TODO: Ugly.
-func (f Field) Const(x float64, n int) Field {
-	c := Field{
-		Type:   f.Type,
-		Origin: f.Origin,
-		Str:    make([]string, len(f.Str)),
-		Data:   make([]float64, n),
-	}
-	copy(c.Str, f.Str)
-	for i := range c.Data {
-		c.Data[i] = x
-	}
-	return c
-}
-
-func (f Field) Apply(t func(float64) float64) {
-	if f.Type == String {
-		panic("Cannot apply function to String column.")
-	}
-
-	for i, v := range f.Data {
-		f.Data[i] = t(v)
-	}
-}
-
 func (df *DataFrame) FieldNames() (names []string) {
 	for name, _ := range df.Columns {
 		names = append(names, name)
@@ -111,7 +207,7 @@ func (df *DataFrame) FieldNames() (names []string) {
 }
 
 func (df *DataFrame) Copy() *DataFrame {
-	result := NewDataFrame(df.Name + "_copy")
+	result := NewDataFrame(df.Name+"_copy", df.Pool)
 	for name, field := range df.Columns {
 		result.Columns[name] = field.Copy()
 	}
@@ -120,7 +216,7 @@ func (df *DataFrame) Copy() *DataFrame {
 }
 
 func (df *DataFrame) CopyMeta() *DataFrame {
-	result := NewDataFrame(df.Name + "_metacopy")
+	result := NewDataFrame(df.Name+"_metacopy", df.Pool)
 	for name, field := range df.Columns {
 		result.Columns[name] = field.CopyMeta()
 	}
@@ -152,31 +248,35 @@ func (df *DataFrame) Apply(field string, f func(float64) float64) {
 	}
 }
 
-func NewDataFrame(name string) *DataFrame {
+// -------------------------------------------------------------------------
+// New Data Frames
+
+func NewDataFrame(name string, pool *StringPool) *DataFrame {
 	return &DataFrame{
 		Name:    name,
 		N:       0,
 		Columns: make(map[string]Field),
+		Pool:    pool,
 	}
 }
 
 // NewDataFrameFrom construct a data frame from data. All fields wich can be
 // used in plot are set up.
-func NewDataFrameFrom(data interface{}) (*DataFrame, error) {
+func NewDataFrameFrom(data interface{}, pool *StringPool) (*DataFrame, error) {
 	t := reflect.TypeOf(data)
 	switch t.Kind() {
 	case reflect.Slice:
-		return newSOMDataFrame(data)
+		return newSOMDataFrame(data, pool)
 	case reflect.Struct:
 		panic("COS data frame not implemented")
 	}
 	return &DataFrame{}, fmt.Errorf("cannot convert %T to data frame", t.String())
 }
 
-func newSOMDataFrame(data interface{}) (*DataFrame, error) {
+func newSOMDataFrame(data interface{}, pool *StringPool) (*DataFrame, error) {
 	t := reflect.TypeOf(data).Elem()
 	v := reflect.ValueOf(data)
-	df := NewDataFrame(reflect.TypeOf(data).String())
+	df := NewDataFrame(reflect.TypeOf(data).String(), pool)
 	n := v.Len()
 	df.N = n
 
@@ -195,7 +295,10 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 			continue
 		}
 
-		field := NewField(n)
+		field := Field{
+			Data: make([]float64, n),
+			Pool: pool,
+		}
 
 		switch f.Type.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -209,7 +312,7 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 			field.Origin = 0
 			for j := 0; j < n; j++ {
 				s := v.Index(j).FieldByName(f.Name).String()
-				field.Data[j] = float64(field.AddStr(s))
+				field.Data[j] = float64(pool.Add(s))
 			}
 		case reflect.Float32, reflect.Float64:
 			field.Type = Float
@@ -254,7 +357,10 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 			continue
 		}
 
-		field := NewField(n)
+		field := Field{
+			Data: make([]float64, n),
+			Pool: pool,
+		}
 
 		switch mt.Out(0).Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -266,7 +372,7 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 			field.Type = String
 			for j := 0; j < n; j++ {
 				s := m.Func.Call([]reflect.Value{v.Index(j)})[0].String()
-				field.Data[j] = float64(field.AddStr(s))
+				field.Data[j] = float64(pool.Add(s))
 			}
 		case reflect.Float32, reflect.Float64:
 			field.Type = Float
@@ -297,105 +403,6 @@ func newSOMDataFrame(data interface{}) (*DataFrame, error) {
 	return df, nil
 }
 
-func (f Field) Discrete() bool { return f.Type.Discrete() }
-
-func (f *Field) AddStr(s string) int {
-	if i := f.StrIdx(s); i != -1 {
-		return i
-	}
-	f.Str = append(f.Str, s)
-	return len(f.Str) - 1
-}
-
-func (f Field) StrIdx(s string) int {
-	for i, t := range f.Str {
-		if s == t {
-			return i
-		}
-	}
-	return -1
-}
-
-func (f Field) Int(x float64) int64 {
-	return int64(x) + f.Origin
-}
-
-func (f Field) AsInt() []int64 {
-	ret := make([]int64, len(f.Data))
-	for i, x := range f.Data {
-		ret[i] = f.Int(x)
-	}
-	return ret
-}
-
-func (f Field) String(x float64) string {
-	switch f.Type {
-	case Float:
-		return fmt.Sprintf("%f", x)
-	case Int:
-		return fmt.Sprintf("%d", f.Int(x))
-	case Time:
-		return f.Time(x).Format("2006-01-02 15:04:05")
-	case String:
-		return f.Str[int(x)]
-	}
-	panic("Oooops")
-}
-
-func (f Field) Strings(x []float64) []string {
-	ans := []string{}
-	for _, v := range x {
-		ans = append(ans, f.String(v))
-	}
-	return ans
-}
-
-func (f Field) AsString() []string {
-	ret := make([]string, len(f.Data))
-	for i, x := range f.Data {
-		ret[i] = f.String(x)
-	}
-	return ret
-}
-
-func (f Field) Time(x float64) time.Time {
-	n := int64(x) + f.Origin
-	return time.Unix(n, 0)
-}
-
-func (f Field) AsTime() []time.Time {
-	ret := make([]time.Time, len(f.Data))
-	for i, x := range f.Data {
-		ret[i] = f.Time(x)
-	}
-	return ret
-}
-
-// FieldType represents the basisc type of a field.
-type FieldType uint
-
-const (
-	Int FieldType = iota
-	Float
-	String
-	Time
-	Vector
-)
-
-// Discrete returns true if ft is a descrete type.
-func (ft FieldType) Discrete() bool {
-	return ft == Int || ft == String
-}
-
-// Strings representation of ft.
-func (ft FieldType) String() string {
-	return []string{"Int", "Float", "String", "Time", "Vector"}[ft]
-}
-
-func isTime(x reflect.Type) bool {
-	return x.PkgPath() == "time" && x.Kind() == reflect.Struct && x.Name() == "Time"
-}
-
 // Filter extracts all rows from df where field==value.
 // TODO: allow ranges
 func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
@@ -415,9 +422,9 @@ func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		floatVal = float64(reflect.ValueOf(value).Int())
 	case reflect.String:
-		sidx := dfft.StrIdx(value.(string))
+		sidx := df.Pool.Find(value.(string))
 		if sidx == -1 {
-			return nil
+			return nil // TODO: is this sensible?
 		}
 		floatVal = float64(sidx)
 	case reflect.Float32, reflect.Float64:
@@ -431,7 +438,7 @@ func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
 		panic("Bad type of value" + reflect.TypeOf(value).String())
 	}
 
-	result := NewDataFrame(fmt.Sprintf("%s|%s=%v", df.Name, field, value))
+	result := NewDataFrame(fmt.Sprintf("%s|%s=%v", df.Name, field, value), df.Pool)
 
 	// How many rows will be in the result data frame?
 	col := df.Columns[field].Data
@@ -572,8 +579,7 @@ func GroupingField(data *DataFrame, names []string) Field {
 		}
 	}
 
-	field := NewField(data.N)
-	field.Type = String
+	field := NewField(data.N, String, data.Pool)
 	for i := 0; i < data.N; i++ {
 		group := ""
 		for _, name := range names {
@@ -584,7 +590,7 @@ func GroupingField(data *DataFrame, names []string) Field {
 			}
 			group += f.String(val)
 		}
-		field.Data[i] = float64(field.AddStr(group))
+		field.Data[i] = float64(data.Pool.Add(group))
 	}
 	return field
 }

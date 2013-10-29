@@ -50,10 +50,13 @@ type Plot struct {
 
 	// Layout maps components like "Title" or "Y-Label" to their viewport.
 	Viewport map[string]Viewport
+
+	Pool *StringPool
 }
 
 func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
-	df, err := NewDataFrameFrom(data)
+	pool := NewStringPool()
+	df, err := NewDataFrameFrom(data, pool)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +73,7 @@ func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
 		Scales:   make(map[string]*Scale),
 		Panels:   nil,
 		Theme:    DefaultTheme,
+		Pool:     pool,
 	}
 
 	return &plot, nil

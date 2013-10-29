@@ -341,9 +341,9 @@ func (b GeomBar) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	}
 	yd, wd := df.Columns["y"].Data, df.Columns["width"].Data
 
-	xminf, yminf := NewField(df.N), NewField(df.N)
-	xmaxf, ymaxf := NewField(df.N), NewField(df.N)
-	xminf.Type, yminf.Type, xmaxf.Type, ymaxf.Type = Float, Float, Float, Float
+	pool := df.Pool
+	xminf, yminf := NewField(df.N, Float, pool), NewField(df.N, Float, pool)
+	xmaxf, ymaxf := NewField(df.N, Float, pool), NewField(df.N, Float, pool)
 	xmin, ymin := xminf.Data, yminf.Data
 	xmax, ymax := xmaxf.Data, ymaxf.Data
 

@@ -125,7 +125,8 @@ func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
 		}
 	}
 
-	result := NewDataFrame(fmt.Sprintf("%s binned by x", data.Name))
+	pool := data.Pool
+	result := NewDataFrame(fmt.Sprintf("%s binned by x", data.Name), pool)
 	nr := 0
 	for _, count := range counts {
 		if count == 0 && s.Drop {
@@ -135,16 +136,11 @@ func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	}
 
 	result.N = nr
-	X := NewField(nr)
-	Count := NewField(nr)
-	NCount := NewField(nr)
-	Density := NewField(nr)
-	NDensity := NewField(nr)
-	X.Type = data.Columns["x"].Type
-	Count.Type = Float
-	NCount.Type = Float
-	Density.Type = Float
-	NDensity.Type = Float
+	X := NewField(nr, data.Columns["x"].Type, pool)
+	Count := NewField(nr, Float, pool) // TODO: Int?
+	NCount := NewField(nr, Float, pool)
+	Density := NewField(nr, Float, pool)
+	NDensity := NewField(nr, Float, pool)
 	i := 0
 	maxDensity := float64(0)
 	for bin, count := range counts {
@@ -231,15 +227,14 @@ func (s *StatLinReq) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	// See http://en.wikipedia.org/wiki/Simple_linear_regression#Normality_assumption
 	// for convidance intervalls of A and B.
 
-	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name))
+	pool := data.Pool
+	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name), pool)
 	result.N = 1
 
-	intercept, slope := NewField(1), NewField(1)
-	intercept.Type, slope.Type = Float, Float
+	intercept, slope := NewField(1, Float, pool), NewField(1, Float, pool)
 	intercept.Data[0], slope.Data[0] = s.A, s.B
 
-	interceptErr, slopeErr := NewField(1), NewField(1)
-	interceptErr.Type, slopeErr.Type = Float, Float
+	interceptErr, slopeErr := NewField(1, Float, pool), NewField(1, Float, pool)
 	interceptErr.Data[0], slopeErr.Data[0] = aErr, bErr
 
 	result.Columns["intercept"] = intercept
@@ -297,14 +292,13 @@ func (s *StatSmooth) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	s.A = ym - s.B*xm
 	aErr, bErr := s.A*0.2, s.B*0.1 // BUG
 
-	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name))
+	pool := data.Pool
+	result := NewDataFrame(fmt.Sprintf("linear regression of %s", data.Name), pool)
 	result.N = 100 // TODO
-	xf := NewField(result.N)
-	yf := NewField(result.N)
-	yminf := NewField(result.N)
-	ymaxf := NewField(result.N)
-	xf.Type, yf.Type = Float, Float
-	yminf.Type, ymaxf.Type = Float, Float
+	xf := NewField(result.N, Float, pool)
+	yf := NewField(result.N, Float, pool)
+	yminf := NewField(result.N, Float, pool)
+	ymaxf := NewField(result.N, Float, pool)
 
 	minx, maxx, _, _ := MinMax(data, "x")
 	// TODO: maybe rescale to full range
@@ -340,17 +334,17 @@ func (StatLabel) Info() StatInfo {
 }
 
 func (s StatLabel) Apply(data *DataFrame, _ *Panel) *DataFrame {
-	result := NewDataFrame(fmt.Sprintf("labeling %s", data.Name))
+	pool := data.Pool
+	result := NewDataFrame(fmt.Sprintf("labeling %s", data.Name), pool)
 	result.N = data.N
-	textf := NewField(result.N)
-	textf.Type = String
+	textf := NewField(result.N, String, pool)
 
 	value := data.Columns["value"].Data
 
 	for i := 0; i < result.N; i++ {
 		// BUG: what if value is time or string?
 		t := fmt.Sprintf(s.Format, value[i])
-		textf.Data[i] = float64(textf.AddStr(t))
+		textf.Data[i] = float64(pool.Add(t))
 	}
 
 	result.Columns["x"] = data.Columns["x"].Copy()
