@@ -478,7 +478,6 @@ func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 		}
 
 		// Coordinates of diagonal corners.
-		println("GeomRect ", i, xmin[i], xmax[i])
 		x0, y0 := xf(xmin[i]), yf(ymin[i])
 		x1, y1 := xf(xmax[i]), yf(ymax[i])
 		// TODO: swap if wrong order

@@ -196,23 +196,17 @@ func same(s []string, t []string) bool {
 // TODO: how about grouping? 69b0d2b contains grouping code.
 //
 // Step 2 in design.
-func (p *Panel) PrepareData() {
-	fmt.Printf("Panel %q: PrepareData()\n", p.Name)
-	println("UUUUUUUUU")
-	p.Data.Print(os.Stdout)
+func (panel *Panel) PrepareData() {
+	fmt.Printf("Panel %q: PrepareData()\n", panel.Name)
 
-	for i, layer := range p.Layers {
+	for i, layer := range panel.Layers {
 		fmt.Printf("Layer %d %q: PrepareData()\n", i, layer.Name)
-		fmt.Printf("p = %p  layer.Panel=%p\n", p, layer.Panel)
 		// Step 2a
 
 		// Set up data and aestetics mapping.
 		if layer.Data == nil {
-			println("Layer data is nil, will copy panel data", layer.Panel.Data.N)
-			layer.Panel.Data.Print(os.Stdout)
 			layer.Data = layer.Panel.Data.Copy()
-			println("Layer data now:")
-			layer.Data.Print(os.Stdout)
+			println("layer has no data, copy from panel", layer.Panel.Name)
 		}
 		aes := MergeAes(layer.DataMapping, layer.Panel.Plot.Aes)
 
@@ -229,11 +223,21 @@ func (p *Panel) PrepareData() {
 		for a, f := range aes {
 			layer.Data.Rename(f, a)
 		}
-		fmt.Printf("PrepareData panel=%q layer=%q\n", p.Name, layer.Name)
-		layer.Data.Print(os.Stdout)
 
 		// Step 2b
 		layer.Panel.Plot.PrepareScales(layer.Data, aes)
+
+		for a := range aes {
+			scale, ok := panel.Scales[a]
+			if !ok {
+				continue
+			}
+			// fmt.Printf("PrepData: Before training Scale %s on panel %s layer %s: [ %.2f, %.2f ]\n",
+			//	a, panel.Name, layer.Name, scale.DomainMin, scale.DomainMax)
+			scale.Train(layer.Data.Columns[a])
+			// fmt.Printf("PrepData: After training Scale %s on panel %s layer %s: [ %.2f, %.2f ]\n",
+			//	a, panel.Name, layer.Name, scale.DomainMin, scale.DomainMax)
+		}
 	}
 }
 
@@ -246,7 +250,6 @@ func (p *Panel) PrepareData() {
 // Step 2b
 func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 	println("PrepareScales data:")
-	data.Print(os.Stdout)
 	scaleable := map[string]bool{
 		"x":        true,
 		"y":        true,
@@ -303,15 +306,17 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			}
 		}
 
-		// Pre-train scales on all panels
-		for r := range plot.Panels {
-			for c := range plot.Panels[r] {
-				scale := plot.Panels[r][c].Scales[a]
-				_, ok := data.Columns[a]
-				println("Training", r, c, scale.Name, a, ok)
-				scale.Train(data.Columns[a])
-			}
-		}
+		/***********************
+				// Pre-train scales on all panels
+				// TODO: This is wrong, or?  Training is per panel!
+				for r := range plot.Panels {
+					for c := range plot.Panels[r] {
+						scale := plot.Panels[r][c].Scales[a]
+						scale.Train(data.Columns[a])
+						fmt.Printf("After training Scale %s on panel %s: [ %.2f, %.2f ]\n", a, plot.Panels[r][c].Name, scale.DomainMin, scale.DomainMax)
+					}
+				}
+		                ***********************/
 	}
 
 }
@@ -321,6 +326,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 // between rows and columns in which the panels recieve a copy.
 func (plot *Plot) distributeScale(scale *Scale, aes string) {
 	sharing := plot.scaleSharing(aes)
+	println("Scaledist ", aes, "is", sharing)
 	switch sharing {
 	case "all-panels":
 		// All panels share the same scale.
@@ -329,7 +335,7 @@ func (plot *Plot) distributeScale(scale *Scale, aes string) {
 				plot.Panels[r][c].Scales[aes] = scale
 			}
 		}
-	case "col-shared":
+	case "row-shared":
 		// Each column share an individual copy of the scale.
 		for r := range plot.Panels {
 			cpy := *scale
@@ -337,7 +343,7 @@ func (plot *Plot) distributeScale(scale *Scale, aes string) {
 				plot.Panels[r][c].Scales[aes] = &cpy
 			}
 		}
-	case "row-shared":
+	case "col-shared":
 		// Add appropriate scale to all panels.
 		for c := range plot.Panels[0] {
 			cpy := *scale
@@ -396,7 +402,6 @@ func (layer *Layer) ComputeStatistics() {
 		fmt.Printf("Layer %q: ComputeStatistics() nil stat\n", layer.Name)
 		return // The identity statistical transformation.
 	}
-	fmt.Printf("Layer %q: ComputeStatistics() %q\n", layer.Name, layer.Stat.Name())
 
 	// Make sure all needed aesthetics (columns) are present in
 	// our data frame.
@@ -436,15 +441,15 @@ func (layer *Layer) ComputeStatistics() {
 	        *************************************************************/
 
 	// Do the transform recursively. Step 3b
-	fmt.Printf("Layer %q: ComputeStatistics() data before %d %v\n",
-		layer.Name, layer.Data.N, layer.Data.FieldNames())
+	before := fmt.Sprintf("%s %d %v", layer.Stat.Name(), layer.Data.N,
+		layer.Data.FieldNames())
 	layer.Data = applyRec(layer.Data, layer.Stat, layer.Panel, additionalFields.Elements())
 	if layer.Data != nil {
-		fmt.Printf("Layer %q: ComputeStatistics() data after %d %v\n",
-			layer.Name, layer.Data.N, layer.Data.FieldNames())
+		fmt.Printf("Layer %q: ComputeStatistics() %s --> %d %v\n",
+			layer.Name, before, layer.Data.N, layer.Data.FieldNames())
 	} else {
-		fmt.Printf("Layer %q: ComputeStatistics() data after is nil\n",
-			layer.Name)
+		fmt.Printf("Layer %q: ComputeStatistics() %s --> nil\n",
+			layer.Name, before)
 	}
 }
 
@@ -502,15 +507,29 @@ func (layer *Layer) WireStatToGeom() {
 	// These may be mapped to plot aestetics by plot.StatMapping.
 	// Do this now.
 	if len(layer.StatMapping) != 0 {
-		fmt.Printf("Layer %s: preparing scales with stat mapping %v\n",
+		fmt.Printf("Layer %q: Preparing scales with stat mapping %v\n",
 			layer.Name, layer.StatMapping)
 
 		// Rename mapped fields to their aestethic name
 		for a, f := range layer.StatMapping {
-			println("Renaming ", f, " to ", a, " because of stat mapping.")
+			fmt.Printf("Layer %q: Renaming %q to %q because of stat mapping.\n",
+				layer.Name, f, a)
 			layer.Data.Rename(f, a)
 		}
 		layer.Panel.Plot.PrepareScales(layer.Data, layer.StatMapping)
+
+		for a := range layer.StatMapping {
+			scale, ok := layer.Panel.Scales[a]
+			if !ok {
+				continue
+			}
+			//fmt.Printf("WireStat: Before training Scale %s on panel %s layer %s: [ %.2f, %.2f ]\n",
+			//	a, layer.Panel.Name, layer.Name, scale.DomainMin, scale.DomainMax)
+			scale.Train(layer.Data.Columns[a])
+			// fmt.Printf("WireStat: After training Scale %s on panel %s layer %s: [ %.2f, %.2f ]\n",
+			//	a, layer.Panel.Name, layer.Name, scale.DomainMin, scale.DomainMax)
+		}
+
 	}
 
 	// TODO: Geoms should contain aesthetict only as input, so there
@@ -560,14 +579,15 @@ func (layer *Layer) ConstructGeoms() {
 		return
 	}
 
-	println("  ", layer.Name, layer.Data.N)
+	fmt.Printf("Layer %q geom %q construction from %d data\n",
+		layer.Name, layer.Geom.Name(), layer.Data.N)
 	layer.Fundamentals = layer.Geom.Construct(layer.Data, layer.Panel)
 }
 
 // -------------------------------------------------------------------------
 // Step 6: Prepare Scales
 func (p *Panel) FinalizeScales() {
-	fmt.Printf("Panel %q: FinalizeScalse()\n", p.Name)
+	fmt.Printf("Panel %q: FinalizeScales()\n", p.Name)
 	for _, scale := range p.Scales {
 		scale.Finalize()
 	}
@@ -597,8 +617,6 @@ func (p *Panel) RenderGeoms() {
 func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 	plot.CreatePanels()
 
-	plot.Check()
-
 	for r := range plot.Panels {
 		for c := range plot.Panels[r] {
 			panel := plot.Panels[r][c]
@@ -607,8 +625,6 @@ func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 			// apply scale transformations. Mapped scales are pre-trained.
 			// Step 2
 			panel.PrepareData()
-			println("RRRRRRRR")
-			panel.Data.Print(os.Stdout)
 
 			// The second step: Compute statistics.
 			// If a layer has a statistical transform: Apply this transformation
@@ -681,12 +697,10 @@ func (plot *Plot) CreatePanels() {
 	} else {
 		plot.createGridPanels()
 	}
-	println("Directly after panel creation")
-	plot.Check()
 }
 
 func (plot *Plot) createSinglePanel() {
-	println("createSinglePanel()")
+	// println("createSinglePanel()")
 	panel := &Panel{
 		Plot:   plot,
 		Data:   plot.Data,
@@ -703,7 +717,7 @@ func (plot *Plot) createSinglePanel() {
 }
 
 func (p *Plot) createGridPanels() {
-	println("createGridPanel()")
+	// println("createGridPanel()")
 	// Process faceting: How many facets are there, how are they named
 	rows, cols := 1, 1
 	var cunq []float64
@@ -752,7 +766,6 @@ func (p *Plot) createGridPanels() {
 				Scales: make(map[string]*Scale),
 				Data:   Filter(rowData, p.Faceting.Columns, cunq[c]),
 			}
-			fmt.Printf("panel %d,%d = %p\n", r, c, panel)
 			for _, orig := range p.Layers {
 				// Copy plot layers to panel, make sure layer data is filtered.
 				layer := &Layer{
@@ -771,8 +784,6 @@ func (p *Plot) createGridPanels() {
 				panel.Layers = append(panel.Layers, layer)
 			}
 			p.Panels[r][c] = panel
-			fmt.Printf("Panel 0,0 %q Layer 0 panel=%p\n",
-				p.Panels[0][0].Name, p.Panels[0][0].Layers[0].Panel)
 
 			if p.Faceting.Totals {
 				// Add a total columns containing all data of this row.
@@ -827,10 +838,6 @@ func (p *Plot) createGridPanels() {
 		cols++
 		rows++
 	}
-
-	fmt.Printf("\nPanel 0,0 %q Layer 0 panel=%p\n",
-		p.Panels[0][0].Name, p.Panels[0][0].Layers[0].Panel)
-	// p.Panels[0][0].Data.Print(os.Stdout)
 
 }
 
@@ -887,7 +894,7 @@ func (plot *Plot) RenderVisuals() {
 
 	showX, showY := false, false
 	for r := range plot.Panels {
-		showX = r+1 == len(plot.Panels)
+		showX = r == 0
 		for c, panel := range plot.Panels[r] {
 			showY = c == 0
 			panelId := fmt.Sprintf("Panel-%d-%d", r, c)
@@ -913,6 +920,12 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 	// Draw grid lines.
 	sx := panel.Scales["x"]
 	sy := panel.Scales["y"]
+	if showX {
+		fmt.Printf("\nX-Scale for panel %q:\n%s\n", panel.Name, sx.String())
+	}
+	if showY {
+		fmt.Printf("\nY-Scale for panel %q:\n%s\n", panel.Name, sy.String())
+	}
 	major := MergeStyles(panel.Plot.Theme.GridMajor, DefaultTheme.GridMajor)
 	// TODO minor := MergeStyles(panel.Plot.Theme.GridMinor, DefaultTheme.GridMinor)
 	for i, x := range sx.Breaks {
@@ -938,6 +951,9 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 			linetype: String2LineType(major["linetype"]),
 			size:     String2Float(major["size"], 0, 20),
 			color:    String2Color(major["color"])}.Draw(vp)
+		if !showY {
+			continue
+		}
 		GrobLine{x0: 0, y0: yv, x1: -0.02, y1: yv,
 			linetype: SolidLine,
 			size:     1,

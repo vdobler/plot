@@ -311,7 +311,7 @@ func TestSimplePlot(t *testing.T) {
 }
 
 func TestFaceting(t *testing.T) {
-	diamonds, err := ReadDiamonds("data/somediamonds.csv")
+	diamonds, err := ReadDiamonds("data/alldiamonds.csv")
 	if err != nil {
 		t.Fatalf("Unxpected error: %s", err)
 	}
@@ -327,8 +327,9 @@ func TestFaceting(t *testing.T) {
 	// plot.Data.Print(os.Stdout)
 
 	plot.Faceting = Faceting{
-		Columns: "RClarity",
-		Rows:    "Cut",
+		Columns:   "Color",
+		Rows:      "Cut",
+		FreeScale: "y",
 	}
 
 	hist := Layer{

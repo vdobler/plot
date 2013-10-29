@@ -91,7 +91,7 @@ func (s *Scale) String() string {
 		return time.Unix(int64(x), 0).Format("2006-01-02 15:04:05")
 	}
 
-	t := fmt.Sprintf("Scale %q named %q: ", s.Aesthetic, s.Name)
+	t := fmt.Sprintf("Scale %q %p named %q: ", s.Aesthetic, s, s.Name)
 	if s.Discrete {
 		t += "discrete\n    Domain:    "
 		t += s.FixLevels.String()
@@ -146,7 +146,6 @@ func (s *Scale) Train(f Field) {
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
-		println("AAAA", min, max, mini, maxi)
 		if mini != -1 {
 			if min < s.DomainMin {
 				s.DomainMin = min
@@ -203,6 +202,7 @@ func (s *Scale) FinalizeDiscrete() {
 
 // TODO: Scale needs access to data frame field to print string values
 func (s *Scale) FinalizeContinous() {
+	fmt.Printf("Finalizing continuos scale %q %p\n", s.Name, s)
 	s.Min, s.Max = s.DomainMin, s.DomainMax
 	if s.FixMin != s.FixMax {
 		s.Min, s.Max = s.FixMin, s.FixMax
@@ -216,7 +216,6 @@ func (s *Scale) FinalizeContinous() {
 	if len(s.Breaks) == 0 {
 		// All auto.
 		s.PrepareBreaks(s.Min, s.Max, 5)
-		println("Did PrepareBreaks", len(s.Breaks))
 	}
 	s.PrepareLabels()
 
