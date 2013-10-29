@@ -326,11 +326,10 @@ func TestFaceting(t *testing.T) {
 	plot.Title = "Diamonds"
 	// plot.Data.Print(os.Stdout)
 
-	/*
-		plot.Faceting = Faceting{
-			Columns: "RClarity",
-			Rows: "Cut",
-		}*/
+	plot.Faceting = Faceting{
+		Columns: "RClarity",
+		Rows:    "Cut",
+	}
 
 	hist := Layer{
 		Name: "Histogram",

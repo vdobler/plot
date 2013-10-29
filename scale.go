@@ -146,6 +146,7 @@ func (s *Scale) Train(f Field) {
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
+		println("AAAA", min, max, mini, maxi)
 		if mini != -1 {
 			if min < s.DomainMin {
 				s.DomainMin = min

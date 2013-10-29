@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 	"math"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 var now = time.Now
 var col = color.RGBA{}
 var floor = math.Floor
+var _ = os.Open
 
 // Plot represents a whole plot.
 type Plot struct {
@@ -109,6 +111,8 @@ type Layer struct {
 // It does not differ much from a Plot as it actually represents
 // one of the plots in a facetted plot.
 type Panel struct {
+	Name string
+
 	Plot *Plot
 
 	// Data is the data to draw.
@@ -193,13 +197,22 @@ func same(s []string, t []string) bool {
 //
 // Step 2 in design.
 func (p *Panel) PrepareData() {
+	fmt.Printf("Panel %q: PrepareData()\n", p.Name)
+	println("UUUUUUUUU")
+	p.Data.Print(os.Stdout)
+
 	for i, layer := range p.Layers {
-		println("PrepareData on layer", i, layer.Name)
+		fmt.Printf("Layer %d %q: PrepareData()\n", i, layer.Name)
+		fmt.Printf("p = %p  layer.Panel=%p\n", p, layer.Panel)
 		// Step 2a
 
 		// Set up data and aestetics mapping.
 		if layer.Data == nil {
+			println("Layer data is nil, will copy panel data", layer.Panel.Data.N)
+			layer.Panel.Data.Print(os.Stdout)
 			layer.Data = layer.Panel.Data.Copy()
+			println("Layer data now:")
+			layer.Data.Print(os.Stdout)
 		}
 		aes := MergeAes(layer.DataMapping, layer.Panel.Plot.Aes)
 
@@ -216,6 +229,8 @@ func (p *Panel) PrepareData() {
 		for a, f := range aes {
 			layer.Data.Rename(f, a)
 		}
+		fmt.Printf("PrepareData panel=%q layer=%q\n", p.Name, layer.Name)
+		layer.Data.Print(os.Stdout)
 
 		// Step 2b
 		layer.Panel.Plot.PrepareScales(layer.Data, aes)
@@ -230,6 +245,8 @@ func (p *Panel) PrepareData() {
 //
 // Step 2b
 func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
+	println("PrepareScales data:")
+	data.Print(os.Stdout)
 	scaleable := map[string]bool{
 		"x":        true,
 		"y":        true,
@@ -243,7 +260,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 
 	for a := range aes {
 		if !scaleable[a] {
-			println("PrepareScales", a, "is un-scalable")
+			fmt.Printf("PrepareScales() %q is un-scalable\n", a)
 			continue
 		}
 
@@ -256,15 +273,15 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 		case plotOk && panelOk:
 			// Scale exists and has been distributet to the panels
 			// already.
-			println("PrepareScales", a, "already distributed")
+			fmt.Printf("PrepareScales() %q already distributed\n", a)
 		case plotOk && !panelOk:
 			// Must be a user set scale on plot; just distribute.
-			println("PrepareScales", a, "distribute from plot")
+			fmt.Printf("PrepareScales() %q distributed from plot\n", a)
 			plot.distributeScale(plotScale, a)
 		case !plotOk && !panelOk:
 			// Auto-generated scale, first occurence of this scale.
 			name, typ := aes[a], data.Columns[a].Type
-			println("PrepareScales", a, "new", name, typ.String())
+			fmt.Printf("PrepareScales() %q create new and distribute\n", a)
 			plotScale = NewScale(a, name, typ)
 			plot.Scales[a] = plotScale
 			plot.distributeScale(plotScale, a)
@@ -290,6 +307,8 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 		for r := range plot.Panels {
 			for c := range plot.Panels[r] {
 				scale := plot.Panels[r][c].Scales[a]
+				_, ok := data.Columns[a]
+				println("Training", r, c, scale.Name, a, ok)
 				scale.Train(data.Columns[a])
 			}
 		}
@@ -302,7 +321,6 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 // between rows and columns in which the panels recieve a copy.
 func (plot *Plot) distributeScale(scale *Scale, aes string) {
 	sharing := plot.scaleSharing(aes)
-	println("distributeScale", aes, sharing)
 	switch sharing {
 	case "all-panels":
 		// All panels share the same scale.
@@ -363,6 +381,8 @@ func (plot *Plot) scaleSharing(aes string) string {
 // Step 3: Satistical Transformation
 
 func (p *Panel) ComputeStatistics() {
+	fmt.Printf("Panel %q: ComputeStatistics()\n", p.Name)
+
 	for _, layer := range p.Layers {
 		layer.ComputeStatistics()
 	}
@@ -373,8 +393,10 @@ func (p *Panel) ComputeStatistics() {
 // Step 3 in design.
 func (layer *Layer) ComputeStatistics() {
 	if layer.Stat == nil {
+		fmt.Printf("Layer %q: ComputeStatistics() nil stat\n", layer.Name)
 		return // The identity statistical transformation.
 	}
+	fmt.Printf("Layer %q: ComputeStatistics() %q\n", layer.Name, layer.Stat.Name())
 
 	// Make sure all needed aesthetics (columns) are present in
 	// our data frame.
@@ -414,8 +436,16 @@ func (layer *Layer) ComputeStatistics() {
 	        *************************************************************/
 
 	// Do the transform recursively. Step 3b
+	fmt.Printf("Layer %q: ComputeStatistics() data before %d %v\n",
+		layer.Name, layer.Data.N, layer.Data.FieldNames())
 	layer.Data = applyRec(layer.Data, layer.Stat, layer.Panel, additionalFields.Elements())
-
+	if layer.Data != nil {
+		fmt.Printf("Layer %q: ComputeStatistics() data after %d %v\n",
+			layer.Name, layer.Data.N, layer.Data.FieldNames())
+	} else {
+		fmt.Printf("Layer %q: ComputeStatistics() data after is nil\n",
+			layer.Name)
+	}
 }
 
 // Recursively partition data on the the additional fields, apply stat and
@@ -451,6 +481,8 @@ func applyRec(data *DataFrame, stat Stat, p *Panel, additionalFields []string) *
 // Step 4: Wiring Result of Stat to Input of Geom
 
 func (p *Panel) WireStatToGeom() {
+	fmt.Printf("Panel %q: WireStatToGeoms()\n", p.Name)
+
 	// A stat may return a nil data frame, e.g. if the input to the stat
 	// itself was empty. In this case no wireing is needed and the layer
 	// geom can be removed.
@@ -502,6 +534,8 @@ func (layer *Layer) WireStatToGeom() {
 // fundamental geoms.
 //
 func (p *Panel) ConstructGeoms() {
+	fmt.Printf("Panel %q: ConstructGeoms()\n", p.Name)
+
 	for _, layer := range p.Layers {
 		layer.ConstructGeoms()
 	}
@@ -526,12 +560,14 @@ func (layer *Layer) ConstructGeoms() {
 		return
 	}
 
+	println("  ", layer.Name, layer.Data.N)
 	layer.Fundamentals = layer.Geom.Construct(layer.Data, layer.Panel)
 }
 
 // -------------------------------------------------------------------------
 // Step 6: Prepare Scales
 func (p *Panel) FinalizeScales() {
+	fmt.Printf("Panel %q: FinalizeScalse()\n", p.Name)
 	for _, scale := range p.Scales {
 		scale.Finalize()
 	}
@@ -541,6 +577,7 @@ func (p *Panel) FinalizeScales() {
 // Step 7: Render fundamental Geoms
 
 func (p *Panel) RenderGeoms() {
+	fmt.Printf("Panel %q: RenderGeoms()\n", p.Name)
 	for _, layer := range p.Layers {
 		if len(layer.Fundamentals) == 0 {
 			continue
@@ -560,6 +597,8 @@ func (p *Panel) RenderGeoms() {
 func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 	plot.CreatePanels()
 
+	plot.Check()
+
 	for r := range plot.Panels {
 		for c := range plot.Panels[r] {
 			panel := plot.Panels[r][c]
@@ -568,6 +607,8 @@ func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 			// apply scale transformations. Mapped scales are pre-trained.
 			// Step 2
 			panel.PrepareData()
+			println("RRRRRRRR")
+			panel.Data.Print(os.Stdout)
 
 			// The second step: Compute statistics.
 			// If a layer has a statistical transform: Apply this transformation
@@ -640,35 +681,24 @@ func (plot *Plot) CreatePanels() {
 	} else {
 		plot.createGridPanels()
 	}
-
-	// Make sure all layers know their parent panel and each panel
-	// is linked back to its plot.
-	for r := range plot.Panels {
-		for c := range plot.Panels[r] {
-			panel := plot.Panels[r][c]
-			panel.Plot = plot
-			for i := range panel.Layers {
-				panel.Layers[i].Panel = panel
-			}
-		}
-	}
+	println("Directly after panel creation")
+	plot.Check()
 }
 
 func (plot *Plot) createSinglePanel() {
 	println("createSinglePanel()")
-	plot.Panels = [][]*Panel{
-		[]*Panel{
-			&Panel{
-				Plot:   plot,
-				Data:   plot.Data,
-				Aes:    plot.Aes.Copy(),
-				Layers: make([]*Layer, len(plot.Layers)),
-				Scales: make(map[string]*Scale),
-			},
-		},
+	panel := &Panel{
+		Plot:   plot,
+		Data:   plot.Data,
+		Aes:    plot.Aes.Copy(),
+		Layers: make([]*Layer, len(plot.Layers)),
+		Scales: make(map[string]*Scale),
 	}
+
+	plot.Panels = [][]*Panel{[]*Panel{panel}}
 	for i, layer := range plot.Layers {
 		plot.Panels[0][0].Layers[i] = layer
+		plot.Panels[0][0].Layers[i].Panel = panel
 	}
 }
 
@@ -678,24 +708,37 @@ func (p *Plot) createGridPanels() {
 	rows, cols := 1, 1
 	var cunq []float64
 	var runq []float64
+	var cunqs []string
+	var runqs []string
 
 	// Make sure facetting can be done and determine number of
 	// rows and columns.
 	if p.Faceting.Columns != "" {
-		if f := p.Data.Columns[p.Faceting.Columns]; !f.Discrete() {
+		f := p.Data.Columns[p.Faceting.Columns]
+		if !f.Discrete() {
 			panic(fmt.Sprintf("Cannot facet over %s (type %s)",
 				p.Faceting.Columns, f.Type.String()))
 		}
 		cunq = Levels(p.Data, p.Faceting.Columns).Elements()
 		cols = len(cunq)
+		cunqs = make([]string, cols)
+
+		for c := 0; c < cols; c++ {
+			cunqs[c] = f.String(cunq[c])
+		}
 	}
 	if p.Faceting.Rows != "" {
-		if f := p.Data.Columns[p.Faceting.Rows]; !f.Discrete() {
+		f := p.Data.Columns[p.Faceting.Rows]
+		if !f.Discrete() {
 			panic(fmt.Sprintf("Cannot facet over %s (type %s)",
 				p.Faceting.Columns, f.Type.String()))
 		}
 		runq = Levels(p.Data, p.Faceting.Rows).Elements()
 		rows = len(runq)
+		runqs = make([]string, rows)
+		for r := 0; r < rows; r++ {
+			runqs[r] = f.String(runq[r])
+		}
 	}
 
 	p.Panels = make([][]*Panel, rows, rows+1)
@@ -703,27 +746,50 @@ func (p *Plot) createGridPanels() {
 		p.Panels[r] = make([]*Panel, cols, cols+1)
 		rowData := Filter(p.Data, p.Faceting.Rows, runq[r])
 		for c := 0; c < cols; c++ {
-			p.Panels[r][c] = new(Panel)
-			p.Panels[r][c].Scales = make(map[string]*Scale)
-			p.Panels[r][c].Data = Filter(rowData, p.Faceting.Columns, cunq[c])
-			for _, layer := range p.Layers {
+			panel := &Panel{
+				Name:   fmt.Sprintf("%d/%d %s/%s", r, c, runqs[r], cunqs[c]),
+				Plot:   p,
+				Scales: make(map[string]*Scale),
+				Data:   Filter(rowData, p.Faceting.Columns, cunq[c]),
+			}
+			fmt.Printf("panel %d,%d = %p\n", r, c, panel)
+			for _, orig := range p.Layers {
 				// Copy plot layers to panel, make sure layer data is filtered.
-				if layer.Data != nil {
-					layer.Data = Filter(layer.Data, p.Faceting.Rows, runq[r])
+				layer := &Layer{
+					Panel:       panel,
+					Name:        orig.Name,
+					Stat:        orig.Stat,
+					Geom:        orig.Geom,
+					DataMapping: orig.DataMapping,
+					StatMapping: orig.StatMapping,
+					GeomMapping: orig.GeomMapping,
+				}
+				if orig.Data != nil {
+					layer.Data = Filter(orig.Data, p.Faceting.Rows, runq[r])
 					layer.Data = Filter(layer.Data, p.Faceting.Columns, cunq[c])
 				}
-				p.Panels[r][c].Layers = append(p.Panels[r][c].Layers, layer)
+				panel.Layers = append(panel.Layers, layer)
 			}
+			p.Panels[r][c] = panel
+			fmt.Printf("Panel 0,0 %q Layer 0 panel=%p\n",
+				p.Panels[0][0].Name, p.Panels[0][0].Layers[0].Panel)
 
 			if p.Faceting.Totals {
 				// Add a total columns containing all data of this row.
-				p.Panels[r] = append(p.Panels[r], &Panel{Data: rowData})
+				panel := &Panel{
+					Name:   fmt.Sprintf("%d/%d %s/-all-", r, c+1, runqs[r]),
+					Plot:   p,
+					Data:   rowData,
+					Scales: make(map[string]*Scale),
+				}
 				for _, layer := range p.Layers {
 					if layer.Data != nil {
 						layer.Data = Filter(layer.Data, p.Faceting.Rows, runq[r])
 					}
-					p.Panels[r][c].Layers = append(p.Panels[r][c].Layers, layer)
+					layer.Panel = panel
+					panel.Layers = append(panel.Layers, layer)
 				}
+				p.Panels[r] = append(p.Panels[r], panel)
 			}
 		}
 	}
@@ -732,21 +798,40 @@ func (p *Plot) createGridPanels() {
 		p.Panels = append(p.Panels, make([]*Panel, cols+1))
 		for c := 0; c < cols; c++ {
 			colData := Filter(p.Data, p.Faceting.Columns, cunq[c])
-			p.Panels[rows][c] = &Panel{Data: colData}
+			panel := &Panel{
+				Name:   fmt.Sprintf("%d/%d -all-/%s", rows, c, cunqs[c]),
+				Plot:   p,
+				Data:   colData,
+				Scales: make(map[string]*Scale),
+			}
 			for _, layer := range p.Layers {
 				if layer.Data != nil {
 					layer.Data = Filter(layer.Data, p.Faceting.Columns, cunq[c])
 				}
-				p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
+				layer.Panel = panel
+				panel.Layers = append(panel.Layers, layer)
 			}
+			p.Panels[rows][c] = panel
 		}
-		p.Panels[rows][cols] = &Panel{Data: p.Data}
+		panel := &Panel{
+			Name:   fmt.Sprintf("%d/%d -all-/-all-", rows, cols),
+			Plot:   p,
+			Data:   p.Data,
+			Scales: make(map[string]*Scale),
+		}
 		for _, layer := range p.Layers {
-			p.Panels[rows][cols].Layers = append(p.Panels[rows][cols].Layers, layer)
+			layer.Panel = panel
+			panel.Layers = append(panel.Layers, layer)
 		}
+		p.Panels[rows][cols] = panel
 		cols++
 		rows++
 	}
+
+	fmt.Printf("\nPanel 0,0 %q Layer 0 panel=%p\n",
+		p.Panels[0][0].Name, p.Panels[0][0].Layers[0].Panel)
+	// p.Panels[0][0].Data.Print(os.Stdout)
+
 }
 
 // -------------------------------------------------------------------------
@@ -938,4 +1023,26 @@ func (m AesMapping) Combine(ams ...AesMapping) AesMapping {
 		}
 	}
 	return merged
+}
+
+func (plot *Plot) Check() {
+	fmt.Printf("=============== Check of plot ================\n")
+	for r := range plot.Panels {
+		for c := range plot.Panels[r] {
+			panel := plot.Panels[r][c]
+			if panel.Plot != plot {
+				fmt.Printf("Panel %d,%d %q: panel.Plot=%p but plot=%p\n",
+					r, c, panel.Name, panel, plot)
+			}
+			for i := range panel.Layers {
+				layer := panel.Layers[i]
+				if layer.Panel != panel {
+					fmt.Printf("Panel %d,%d %q, Layer %d %q: layer.Panel=%p but panel=%p\n",
+						r, c, panel.Name, i, layer.Name, layer.Panel, panel)
+
+				}
+			}
+		}
+	}
+	fmt.Printf("---------------- check done ------------------\n")
 }

@@ -117,7 +117,6 @@ func TestFilter(t *testing.T) {
 		t.Errorf("Got %d, want 4", ukOnly.N)
 	}
 	originField := ukOnly.Columns["Origin"]
-	fmt.Printf("Str: %v\n", originField.Str)
 	ukIdx := originField.StrIdx("uk")
 	for i, o := range ukOnly.Columns["Origin"].Data {
 		if int(o) != ukIdx || originField.String(o) != "uk" {
@@ -167,6 +166,13 @@ func TestMinMax(t *testing.T) {
 	if max != 99.0 || b != 10 {
 		t.Errorf("Min: Got %f/%d, want 99.00/10", max, b)
 	}
+}
+
+func TestDataFrameCopy(t *testing.T) {
+	df, _ := NewDataFrameFrom(measurement)
+
+	cp := df.Copy()
+	cp.Print(os.Stdout)
 }
 
 func TestPrint(t *testing.T) {

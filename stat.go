@@ -3,6 +3,7 @@ package plot
 import (
 	"fmt"
 	"math"
+	"os"
 )
 
 // Stat is the interface of statistical transform.
@@ -75,6 +76,9 @@ func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	if data == nil || data.N == 0 {
 		return nil
 	}
+	println("StatBin Data:")
+	data.Print(os.Stdout)
+
 	min, max, mini, maxi := MinMax(data, "x")
 	if mini == -1 && maxi == -1 {
 		return nil
@@ -106,12 +110,12 @@ func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 + origin }
 
 	counts := make([]int64, numBins+1) // TODO: Buggy here?
-	// println("Made counts", len(counts), origin, binWidth)
+	println("StatBin, made counts", len(counts), min, max, origin, binWidth)
 	column := data.Columns["x"].Data
 	maxcount := int64(0)
 	for i := 0; i < data.N; i++ {
 		bin := x2bin(column[i])
-		// println("  ", i, column[i], bin)
+		println("  StatBin ", i, column[i], bin)
 		counts[bin]++
 		if counts[bin] > maxcount {
 			maxcount = counts[bin]
