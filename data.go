@@ -445,18 +445,14 @@ func Filter(df *DataFrame, field string, value interface{}) *DataFrame {
 
 	// Actual filtering.
 	for name, field := range df.Columns {
-		f := NewField(result.N)
-		f.Type = field.Type
-		if f.Type == String && len(field.Str) > 0 {
-			f.Str = make([]string, len(field.Str))
-			copy(f.Str, field.Str)
-		}
+		f := field.CopyMeta()
+		f.Data = make([]float64, result.N)
 		n := 0
 		for i := 0; i < df.N; i++ {
 			if col[i] != floatVal {
 				continue
 			}
-			f.Data[n] = col[i]
+			f.Data[n] = field.Data[i]
 			n++
 		}
 		result.Columns[name] = f
