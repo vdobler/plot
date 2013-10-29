@@ -334,7 +334,8 @@ func (b GeomBar) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	xf := df.Columns["x"]
 	xd := xf.Data
 	if !df.Has("width") {
-		width := xf.Resolution() * 0.9
+		width := xf.Resolution() * 0.9 // TODO: read from style
+		println("GeomBar: no width in data frame, will use", width)
 		wf := xf.Const(width, df.N)
 		df.Columns["width"] = wf
 	}
@@ -344,7 +345,7 @@ func (b GeomBar) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	xmaxf, ymaxf := NewField(df.N), NewField(df.N)
 	xminf.Type, yminf.Type, xmaxf.Type, ymaxf.Type = Float, Float, Float, Float
 	xmin, ymin := xminf.Data, yminf.Data
-	xmax, ymax := xminf.Data, yminf.Data
+	xmax, ymax := xmaxf.Data, ymaxf.Data
 
 	runningYmax := make(map[float64]float64)
 	barsAt := make(map[float64]float64)
@@ -477,6 +478,7 @@ func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 		}
 
 		// Coordinates of diagonal corners.
+		println("GeomRect ", i, xmin[i], xmax[i])
 		x0, y0 := xf(xmin[i]), yf(ymin[i])
 		x1, y1 := xf(xmax[i]), yf(ymax[i])
 		// TODO: swap if wrong order

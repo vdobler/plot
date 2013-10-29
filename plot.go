@@ -51,7 +51,7 @@ type Plot struct {
 }
 
 func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
-	df, err := NewDataFrameFrom(measurement)
+	df, err := NewDataFrameFrom(data)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,16 @@ func applyRec(data *DataFrame, stat Stat, p *Panel, additionalFields []string) *
 // Step 4: Wiring Result of Stat to Input of Geom
 
 func (p *Panel) WireStatToGeom() {
+	// A stat may return a nil data frame, e.g. if the input to the stat
+	// itself was empty. In this case no wireing is needed and the layer
+	// geom can be removed.
+
 	for _, layer := range p.Layers {
+		if layer.Data == nil {
+			// Data was cleared by stat.
+			layer.Geom = nil
+			continue
+		}
 		layer.WireStatToGeom()
 	}
 }
@@ -466,8 +475,8 @@ func (layer *Layer) WireStatToGeom() {
 
 		// Rename mapped fields to their aestethic name
 		for a, f := range layer.StatMapping {
-			layer.Data.Rename(f, a)
 			println("Renaming ", f, " to ", a, " because of stat mapping.")
+			layer.Data.Rename(f, a)
 		}
 		layer.Panel.Plot.PrepareScales(layer.Data, layer.StatMapping)
 	}
@@ -500,7 +509,9 @@ func (p *Panel) ConstructGeoms() {
 
 func (layer *Layer) ConstructGeoms() {
 	if layer.Geom == nil {
-		layer.Panel.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
+		if layer.Data != nil {
+			layer.Panel.Plot.Warnf("No Geom specified in layer %s.", layer.Name)
+		}
 		return
 	}
 
@@ -620,7 +631,7 @@ func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 // -------------------------------------------------------------------------
 // Panel creation and layout.
 
-// CreatePanels populates p.Panels, coverned by p.Faceting.
+// CreatePanels populates p.Panels, governed by p.Faceting.
 //
 // Not only p.Data is facetted but p.Layers also (if they contain own data).
 func (plot *Plot) CreatePanels() {
@@ -693,6 +704,7 @@ func (p *Plot) createGridPanels() {
 		rowData := Filter(p.Data, p.Faceting.Rows, runq[r])
 		for c := 0; c < cols; c++ {
 			p.Panels[r][c] = new(Panel)
+			p.Panels[r][c].Scales = make(map[string]*Scale)
 			p.Panels[r][c].Data = Filter(rowData, p.Faceting.Columns, cunq[c])
 			for _, layer := range p.Layers {
 				// Copy plot layers to panel, make sure layer data is filtered.

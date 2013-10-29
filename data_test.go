@@ -1,10 +1,13 @@
 package plot
 
 import (
+	"encoding/csv"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"testing"
 )
 
@@ -169,4 +172,75 @@ func TestMinMax(t *testing.T) {
 func TestPrint(t *testing.T) {
 	df, _ := NewDataFrameFrom(measurement)
 	df.Print(os.Stdout)
+}
+
+type Diamond struct {
+	Carat               float32
+	Cut, Color, Clarity string
+	Depth, Table        float32
+	Price               int
+	X, Y, Z             float32
+}
+
+func (d Diamond) RClarity() string {
+	c := d.Clarity
+	n := len(c) - 1
+	if c[n] == '1' || c[n] == '2' {
+		return c[:n]
+	}
+	return c
+}
+
+func ReadDiamonds(fname string) (diamonds []Diamond, err error) {
+	file, err := os.Open(fname)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	// Helper to convert srtrings to float and int.
+	s2f := func(s string) float32 {
+		value, err := strconv.ParseFloat(s, 32)
+		if err != nil {
+			value = math.NaN()
+		}
+		return float32(value)
+	}
+	s2i := func(s string) int {
+		value, err := strconv.Atoi(s)
+		if err != nil {
+			value = -1
+		}
+		return value
+	}
+
+	csvReader := csv.NewReader(file)
+	first := true
+	for {
+		record, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return diamonds, err
+		}
+		if first {
+			first = false
+			continue
+		}
+		d := Diamond{
+			Carat:   s2f(record[1]),
+			Cut:     record[2],
+			Color:   record[3],
+			Clarity: record[4],
+			Depth:   s2f(record[5]),
+			Table:   s2f(record[6]),
+			Price:   s2i(record[7]),
+			X:       s2f(record[8]),
+			Y:       s2f(record[9]),
+			Z:       s2f(record[10]),
+		}
+		diamonds = append(diamonds, d)
+	}
+
+	return diamonds, nil
 }

@@ -516,17 +516,22 @@ func MinMax(df *DataFrame, field string) (minval, maxval float64, minidx, maxidx
 
 func (f Field) MinMax() (minval, maxval float64, minidx, maxidx int) {
 	if len(f.Data) == 0 {
+		println("MinMax: no data -> NaN")
 		return math.NaN(), math.NaN(), -1, -1
 	}
 
 	column := f.Data
 	minval, maxval = column[0], column[0]
+	// println("min/max start", minval, maxval)
 	minidx, maxidx = 0, 0
 	for i, v := range column {
+		// println("  ", v)
 		if v < minval {
 			minval, minidx = v, i
+			// println("    lower")
 		} else if v > maxval {
 			maxval, maxidx = v, i
+			// println("    higher")
 		}
 	}
 

@@ -309,3 +309,47 @@ func TestSimplePlot(t *testing.T) {
 	plot.Draw(vg.Inches(10), vg.Inches(7), file)
 	file.Close()
 }
+
+func TestFaceting(t *testing.T) {
+	diamonds, err := ReadDiamonds("data/somediamonds.csv")
+	if err != nil {
+		t.Fatalf("Unxpected error: %s", err)
+	}
+
+	aes := AesMapping{
+		"x": "Carat",
+	}
+	plot, err := NewPlot(diamonds, aes)
+	if err != nil {
+		t.Fatalf("Unxpected error: %s", err)
+	}
+	plot.Title = "Diamonds"
+	// plot.Data.Print(os.Stdout)
+
+	/*
+		plot.Faceting = Faceting{
+			Columns: "RClarity",
+			Rows: "Cut",
+		}*/
+
+	hist := Layer{
+		Name: "Histogram",
+		Stat: StatBin{
+			Drop: true,
+		},
+		StatMapping: AesMapping{
+			"y": "count",
+		},
+		Geom: GeomBar{
+			Style: AesMapping{
+				"fill": "gray20",
+			}}}
+	plot.Layers = append(plot.Layers, &hist)
+
+	file, err := os.Create("hist.png")
+	if err != nil {
+		t.Fatalf("%", err)
+	}
+	plot.Draw(vg.Inches(10), vg.Inches(7), file)
+	file.Close()
+}

@@ -305,11 +305,15 @@ func (s *Scale) PrepareContinousBreaks(min, max float64, num int) {
 		x += step
 	}
 
+	fmt.Printf("PrepareContinousBreaks(%.2f, %.2f, %d)\n  delta = %.3f  mag  = %.3f   f    = %.3f\n  step = %.3f  x0  =  %.3f   n=%d\n", min, max, num, delta, mag, f, step, math.Ceil(min/step)*step, len(s.Breaks))
 }
 
 // PrepareLabels sets up s.Labels (if empty) by formating s.Breaks.
 func (s *Scale) PrepareLabels() {
 	println("PrepareLabels with ", len(s.Breaks))
+	if len(s.Breaks) == 0 {
+		return
+	}
 	if len(s.Labels) == 0 {
 		// Automatic label creation.
 		formatter := s.ChooseFloatFormatter()

@@ -72,10 +72,19 @@ func (StatBin) Info() StatInfo {
 }
 
 func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
-	if data == nil {
+	if data == nil || data.N == 0 {
 		return nil
 	}
-	min, max, _, _ := MinMax(data, "x")
+	min, max, mini, maxi := MinMax(data, "x")
+	if mini == -1 && maxi == -1 {
+		return nil
+	}
+	// println("min/max", min, max)
+	if min == max {
+		// TODO. Also NaN and Inf
+		min -= 1
+		max += 1
+	}
 
 	var binWidth float64 = s.BinWidth
 	var numBins int
@@ -94,13 +103,15 @@ func (s StatBin) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	}
 
 	x2bin := func(x float64) int { return int((x - origin) / binWidth) }
-	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 }
+	bin2x := func(b int) float64 { return float64(b)*binWidth + binWidth/2 + origin }
 
 	counts := make([]int64, numBins+1) // TODO: Buggy here?
+	// println("Made counts", len(counts), origin, binWidth)
 	column := data.Columns["x"].Data
 	maxcount := int64(0)
 	for i := 0; i < data.N; i++ {
 		bin := x2bin(column[i])
+		// println("  ", i, column[i], bin)
 		counts[bin]++
 		if counts[bin] > maxcount {
 			maxcount = counts[bin]
