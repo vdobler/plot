@@ -354,3 +354,29 @@ func TestFaceting(t *testing.T) {
 	plot.Draw(vg.Inches(10), vg.Inches(7), file)
 	file.Close()
 }
+
+func TestDiscreteXScale(t *testing.T) {
+	aes := AesMapping{
+		"x": "Country",
+		"y": "BMI",
+	}
+	plot, err := NewPlot(measurement, aes)
+	if err != nil {
+		t.Fatalf("Unxpected error: %s", err)
+	}
+	plot.Title = "Discrete x scale"
+
+	rawData := Layer{
+		Name: "Raw Data",
+		Stat: nil, // identity
+		Geom: GeomPoint{},
+	}
+	plot.Layers = append(plot.Layers, &rawData)
+
+	file, err := os.Create("discrx.png")
+	if err != nil {
+		t.Fatalf("%", err)
+	}
+	plot.Draw(vg.Inches(10), vg.Inches(7), file)
+	file.Close()
+}

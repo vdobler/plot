@@ -29,3 +29,11 @@ func (sp *StringPool) Find(s string) int {
 	}
 	return -1
 }
+
+func (sp *StringPool) Get(i int) string {
+	if i<0 || i>=len(sp.pool) {
+		return "--NA--"
+	}
+
+	return sp.pool[i]
+}

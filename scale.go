@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"time"
+	"sort"
 )
 
 // Scale provides position scales like x- and y-axis as well as color
@@ -12,6 +13,7 @@ import (
 type Scale struct {
 	Name string // Name is used as the title in legends or as axis labels.
 
+	DomainType FieldType
 	Discrete bool
 	Time     bool
 
@@ -54,9 +56,10 @@ type Scale struct {
 	Levels   FloatSet
 
 	// All following fields are set in Prepare.
+	// These functions map the domain space to the aesthetics space.
 	Color func(x float64) color.Color // color, fill. Any color
 	Pos   func(x float64) float64     // x, y, size, alpha. In [0,1]
-	Style func(x float64) int         // point and line type. Range ???
+	Style func(x float64) int         // point and line type. BUG: Range
 
 	Finalized bool
 }
@@ -67,6 +70,7 @@ func NewScale(aesthetic string, name string, ft FieldType) *Scale {
 	scale := Scale{
 		Name:         name,
 		Aesthetic:    aesthetic,
+		DomainType:   ft,
 		DomainMin:    math.Inf(+1),
 		DomainMax:    math.Inf(-1),
 		DomainLevels: NewFloatSet(),
@@ -139,10 +143,9 @@ func (s *Scale) String() string {
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
 	if f.Discrete() {
-		// TODO: this depends on using the same StrIdx.
-		// Maybe there should be a single StrIdx per plot.
-		// This would internalize string valuies properly.
 		s.DomainLevels.Join(f.Levels())
+		s.Min = 0
+		s.Max = float64(len(s.DomainLevels)-1)
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
@@ -181,13 +184,13 @@ func (s *Scale) TrainByValue(xs ...float64) {
 // Preparing a scale
 
 // Prepare initialises the remaining fields after training.
-func (s *Scale) Finalize() {
+func (s *Scale) Finalize(pool *StringPool) {
 	if s.Finalized {
 		return
 	}
 
 	if s.Discrete {
-		s.FinalizeDiscrete()
+		s.FinalizeDiscrete(pool)
 	} else {
 		s.FinalizeContinous()
 	}
@@ -195,12 +198,89 @@ func (s *Scale) Finalize() {
 	s.Finalized = true
 }
 
-func (s *Scale) FinalizeDiscrete() {
-	fmt.Printf("Scale %#v\n", *s)
-	panic("Implement me")
+// FinalizeDiscrete
+func (s *Scale) FinalizeDiscrete(pool *StringPool) {
+	fmt.Printf("Finalizing discrete scale %q %p\n", s.Name, s)
+	// TODO: Manual setting the values.
+
+	n := len(s.DomainLevels)
+
+	expand := (s.Max-s.Min)*s.ExpandRel + s.ExpandAbs
+	if expand < 0.1 {
+		expand = 0.1
+	}
+	s.Min -= expand
+	s.Max += expand
+	fullRange := s.Max - s.Min
+
+	// Breaks are put on integer values [0,n-1].
+	s.Breaks = make([]float64, n)
+	for i := range s.Breaks {
+		s.Breaks[i] = float64(i)
+	}
+
+	// Ordering and labels of the discrete levels.
+	levels := s.DomainLevels.Elements()
+	sort.Float64s(levels)
+	s.Labels = make([]string, n)
+	switch s.DomainType {
+	case String:
+		for i := range s.Labels {
+			s.Labels[i] = pool.Get(int(levels[i]))
+		}
+	case Int:
+		for i := range s.Labels {
+			s.Labels[i] = fmt.Sprintf("%d", int(levels[i]))
+		}
+	default:
+		panic(fmt.Sprintf("Bad domain type %s for discrete scale %s (%s)",
+			s.DomainType.String(), s.Aesthetic, s.Name))
+	}
+
+	// Produce mapping functions
+	s.Pos = func(x float64) float64 {
+		// Find x in levels
+		i := -1
+		for j, v := range levels {
+			if v == x {
+				i=j
+				break
+			}
+		}
+		if i == -1 {
+			fmt.Printf("Strange %f not found in levels of scale %s %p",
+				s.Aesthetic, s)
+			return math.NaN()
+		}
+
+		// Scale to [0,1]
+		return (float64(i)-s.Min)/fullRange
+	}
+	s.Color = func(x float64) color.Color {
+		c := s.Pos(x)
+		// TODO (a lot)
+		if c < 1/3 {
+			r := uint8(c * 3 * 255)
+			return color.RGBA{r, 0xff - r, 0, 0xff}
+		} else if c < 2/3 {
+			r := uint8((c - 1/3) * 3 * 255)
+			return color.RGBA{0, r, 0xff - r, 0xff}
+		} else {
+			r := uint8((c - 2/3) * 3 * 255)
+			return color.RGBA{0xff - r, 0, r, 0xff}
+		}
+		return color.RGBA{}
+	}
+	s.Style = func(x float64) int {
+		c := s.Pos(x)
+		c *= float64(StarPoint) // TODO same as below
+		return int(c)
+	}
+
 }
 
-// TODO: Scale needs access to data frame field to print string values
+// FinalizeContinous sets up the fields Breaks, Labels and the
+// functions from Domain to [0,1] (x,y,time, etc), color or int.
 func (s *Scale) FinalizeContinous() {
 	fmt.Printf("Finalizing continuos scale %q %p\n", s.Name, s)
 	s.Min, s.Max = s.DomainMin, s.DomainMax

@@ -593,7 +593,7 @@ func (layer *Layer) ConstructGeoms() {
 func (p *Panel) FinalizeScales() {
 	fmt.Printf("Panel %q: FinalizeScales()\n", p.Name)
 	for _, scale := range p.Scales {
-		scale.Finalize()
+		scale.Finalize(p.Plot.Pool)
 	}
 }
 
@@ -658,7 +658,17 @@ func (plot *Plot) Draw(width, height vg.Length, out io.Writer) {
 			// the scales.
 			// Step 6
 			panel.FinalizeScales()
+		}
+	}
 
+	fmt.Printf("X-Scale\n%s\n", plot.Scales["x"].String())
+	fmt.Printf("Y-Scale\n%s\n", plot.Scales["y"].String())
+	if cs, ok := plot.Scales["fill"]; ok {
+		fmt.Printf("Fill-Scale\n%s\n", cs.String())
+	}
+
+	for r := range plot.Panels {
+		for _, panel := range plot.Panels[r] {
 			// Render the fundamental Geoms to Grobs using scales.
 			// Step 7
 			panel.RenderGeoms()
