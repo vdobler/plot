@@ -1088,6 +1088,12 @@ func (plot *Plot) RenderVisuals() {
 	}
 }
 
+const (
+	majorTicMM = 2
+)
+
+// Draw the whole content of this panel to vp.
+// show{X,Y} are used to control display of X and Y scale.
 func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 
 	// Draw strips first.
@@ -1131,11 +1137,12 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 		if !showX {
 			continue
 		}
-		GrobLine{x0: xv, y0: 0, x1: xv, y1: -0.02,
+		h := vp.YI(vg.Millimeters(majorTicMM))
+		GrobLine{x0: xv, y0: 0, x1: xv, y1: -h,
 			linetype: SolidLine,
 			size:     1,
 			color:    BuiltinColors["gray"]}.Draw(vp)
-		GrobText{x: xv, y: -0.02, hjust: 0.5, vjust: 1, text: sx.Labels[i],
+		GrobText{x: xv, y: -h, hjust: 0.5, vjust: 1, text: sx.Labels[i],
 			size:  12,
 			color: BuiltinColors["gray20"]}.Draw(vp)
 	}
@@ -1148,11 +1155,12 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 		if !showY {
 			continue
 		}
-		GrobLine{x0: 0, y0: yv, x1: -0.02, y1: yv,
+		w := vp.XI(vg.Millimeters(majorTicMM))
+		GrobLine{x0: 0, y0: yv, x1: -w, y1: yv,
 			linetype: SolidLine,
 			size:     1,
 			color:    BuiltinColors["gray"]}.Draw(vp)
-		GrobText{x: -0.02, y: yv, hjust: 1, vjust: 0.5, text: sy.Labels[i],
+		GrobText{x: -w, y: yv, hjust: 1, vjust: 0.5, text: sy.Labels[i],
 			size:  12,
 			color: BuiltinColors["gray20"]}.Draw(vp)
 	}

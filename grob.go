@@ -386,10 +386,10 @@ func (vp Viewport) Y(y float64) vg.Length {
 	return ans
 }
 
-// XI and YI turn canvas length to natural grob coordinates [0,1].
+// XI and YI turn canvas length to natural grob factors.
 func (vp Viewport) XI(w vg.Length) float64 {
-	return float64((w - vp.X0) / vp.Width)
+	return float64(w  / vp.Width)
 }
 func (vp Viewport) YI(h vg.Length) float64 {
-	return float64((h - vp.Y0) / vp.Height)
+	return float64(h / vp.Height)
 }
