@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"time"
 	"sort"
+	"time"
 )
 
 // Scale provides position scales like x- and y-axis as well as color
@@ -14,8 +14,8 @@ type Scale struct {
 	Name string // Name is used as the title in legends or as axis labels.
 
 	DomainType FieldType
-	Discrete bool
-	Time     bool
+	Discrete   bool
+	Time       bool
 
 	// pos (x/y), col/fill, size, type ... TODO: good like this?
 	Aesthetic string // should be same like the map key in Plot.Scales
@@ -145,7 +145,7 @@ func (s *Scale) Train(f Field) {
 	if f.Discrete() {
 		s.DomainLevels.Join(f.Levels())
 		s.Min = 0
-		s.Max = float64(len(s.DomainLevels)-1)
+		s.Max = float64(len(s.DomainLevels) - 1)
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
@@ -243,7 +243,7 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 		i := -1
 		for j, v := range levels {
 			if v == x {
-				i=j
+				i = j
 				break
 			}
 		}
@@ -254,7 +254,7 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 		}
 
 		// Scale to [0,1]
-		return (float64(i)-s.Min)/fullRange
+		return (float64(i) - s.Min) / fullRange
 	}
 	s.Color = func(x float64) color.Color {
 		c := s.Pos(x)

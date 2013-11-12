@@ -302,7 +302,8 @@ func TestSimplePlot(t *testing.T) {
 	}
 	plot.Layers = append(plot.Layers, &linReg)
 
-	plot.WritePNG("simple.png", 200,150)
+	plot.Create()
+	plot.WritePNG("simple.png", 1200, 960)
 }
 
 func TestFaceting(t *testing.T) {
@@ -340,8 +341,8 @@ func TestFaceting(t *testing.T) {
 				"fill": "gray20",
 			}}}
 	plot.Layers = append(plot.Layers, &hist)
-
-	plot.WritePNG("hist.png", 200,150)
+	plot.Create()
+	plot.WritePNG("hist.png", 1200, 960)
 }
 
 func TestDiscreteXScale(t *testing.T) {
@@ -361,6 +362,7 @@ func TestDiscreteXScale(t *testing.T) {
 		Geom: GeomPoint{},
 	}
 	plot.Layers = append(plot.Layers, &rawData)
+	plot.Create()
 
-	plot.WritePNG("discrx.png", 200,150)
+	plot.WritePNG("discrx.png", 1200, 960)
 }

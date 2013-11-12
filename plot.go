@@ -75,6 +75,7 @@ func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
 		Panels:   nil,
 		Theme:    DefaultTheme,
 		Pool:     pool,
+		Grobs:    make(map[string]Grob),
 	}
 
 	return &plot, nil
@@ -139,6 +140,10 @@ type Panel struct {
 	// Grobs contains the non-layer grobs like panel background
 	// and grid lines.
 	Grobs []Grob
+
+	// Top, Right, Buttom and Left viewports and grobs. TODO: a bit ugly...
+	Tvp, Rvp, Bvp, Lvp Viewport
+	Tgr, Rgr, Bgr, Lgr []Grob
 }
 
 // Facetting describes the facetting to use. The zero value indicates
@@ -689,16 +694,32 @@ func (plot *Plot) Create() {
 	plot.RenderVisuals()
 }
 
-func (p *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
+func (plot *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
 	// TODO: make sure plot has been constructed.
-	p.Layout(canvas, width, height)
 
-	for _, element := range []string{"Title", "X-Label", "Y-Label",
-		"Row-Strips", "Col-Strips", "Guides" } {
-			if grob, ok := p.Grobs[element]; ok {
-				
-			}
+	// Layouting the plot determines the viewports of all the elements
+	// in the plot, especially the panels.
+	plot.Layout(canvas, width, height)
+
+	// Actual drawing of the general stuff.
+	for _, element := range []string{"Title", "X-Label", "Y-Label"} {
+		if grob, ok := plot.Grobs[element]; ok {
+			grob.Draw(plot.Viewports[element])
 		}
+	}
+	// TODO: Guides
+
+	// Drawing of the individual panels.
+	showX, showY := false, false
+	for r := range plot.Panels {
+		showX = r == 0
+		for c, panel := range plot.Panels[r] {
+			showY = c == 0
+			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
+			fmt.Printf("Drawing Panel %s: %+v\n", panelId, plot.Viewports[panelId])
+			panel.Draw(plot.Viewports[panelId], showX, showY)
+		}
+	}
 }
 
 func (p *Plot) WritePNG(filename string, width, height vg.Length) error {
@@ -743,6 +764,8 @@ func (plot *Plot) createSinglePanel() {
 		plot.Panels[0][0].Layers[i] = layer
 		plot.Panels[0][0].Layers[i].Panel = panel
 	}
+
+	fmt.Printf("After createSinglePanel plot.Panels = %+v\n", plot.Panels)
 }
 
 func (p *Plot) createGridPanels() {
@@ -815,7 +838,7 @@ func (p *Plot) createGridPanels() {
 			if p.Faceting.Totals {
 				// Add a total columns containing all data of this row.
 				panel := &Panel{
-					Name:   fmt.Sprintf("%d/%d %s/-all-",
+					Name: fmt.Sprintf("%d/%d %s/-all-",
 						r, c+1, p.Faceting.RowStrips[r]),
 					Plot:   p,
 					Data:   rowData,
@@ -838,7 +861,7 @@ func (p *Plot) createGridPanels() {
 		for c := 0; c < cols; c++ {
 			colData := Filter(p.Data, p.Faceting.Columns, cunq[c])
 			panel := &Panel{
-				Name:   fmt.Sprintf("%d/%d -all-/%s",
+				Name: fmt.Sprintf("%d/%d -all-/%s",
 					rows, c, p.Faceting.ColStrips[c]),
 				Plot:   p,
 				Data:   colData,
@@ -873,7 +896,6 @@ func (p *Plot) createGridPanels() {
 // -------------------------------------------------------------------------
 // Layouting
 
-
 /*
 
 Layout and names of the viewports:
@@ -901,7 +923,6 @@ Layout and names of the viewports:
 
 */
 
-
 // Layout computes suitable viewports for the different components.
 func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	plot.Viewports = make(map[string]Viewport)
@@ -927,36 +948,35 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	}
 
 	var guidesw vg.Length
-	guideswidth := vg.Millimeters(15) // TODO
-
+	guidesw = vg.Millimeters(20) // TODO
 
 	plot.Viewports["Title"] = Viewport{
 		Canvas: canvas,
-		X0: 0, Y0: height-titleh,
+		X0:     0, Y0: height - titleh,
 		Width: width, Height: titleh,
 	}
 	plot.Viewports["Y-Label"] = Viewport{
 		Canvas: canvas,
-		X0: 0, Y0: xlabelh,
-		Width: ylabelw, Height: height-titleh-xlabelh,
+		X0:     0, Y0: xlabelh,
+		Width: ylabelw, Height: height - titleh - xlabelh,
 	}
 	plot.Viewports["X-Label"] = Viewport{
 		Canvas: canvas,
-		X0: ylabelw, Y0: 0,
-		Width: width-ylabelw-guidesw, Height: xlabelh,
+		X0:     ylabelw, Y0: 0,
+		Width: width - ylabelw - guidesw, Height: xlabelh,
 	}
 
 	plot.Viewports["Guides"] = Viewport{
 		Canvas: canvas,
-		X0: width-guidesw, Y0: xlabelh,
-		Width: guidesw, Height: height-titleh-xlabelh,
+		X0:     width - guidesw, Y0: xlabelh,
+		Width: guidesw, Height: height - titleh - xlabelh,
 	}
 
 	// Col- and Row-Labels, X- and Y-Tics
 	var xticsh, yticsw vg.Length
 	var collabh, rowlabw vg.Length
-	yticsw = vg.Millimeters(10) // TODO
-	xticsh = vg.Millimeters(10) // TODO
+	yticsw = vg.Millimeters(20)  // TODO
+	xticsh = vg.Millimeters(10)  // TODO
 	collabh = vg.Millimeters(10) // TODO
 	rowlabw = vg.Millimeters(10) // TODO
 
@@ -964,21 +984,23 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	sepy := vg.Millimeters(2) // TODO: make configurabel
 	nrows := len(plot.Panels)
 	ncols := len(plot.Panels[0])
+	fmt.Printf("Layouting nrows=%d ncols=%d\n", nrows, ncols)
 	tw := width - ylabelw - guidesw - yticsw - rowlabw
 	th := height - titleh - xlabelh - collabh - xticsh
 	pwidth := (tw - sepx*vg.Length(ncols-1)) / vg.Length(ncols)
 	pheight := (th - sepy*vg.Length(nrows-1)) / vg.Length(nrows)
-
-	x0, y0 := ylabelw + yticsw, xlabelh+xticsh
+	fmt.Printf("Layouting panel dim %.2f %.2f\n", pwidth, pheight)
+	x0, y0 := ylabelw+yticsw, xlabelh+xticsh
 	// Viewports for the panels themself
 	for r := 0; r < nrows; r++ {
 		for c := 0; c < ncols; c++ {
 			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
 			x := x0 + vg.Length(c)*(pwidth+sepx)
 			y := y0 + vg.Length(r)*(pheight+sepy)
+			fmt.Printf("  %s r=%d c=%d:  x=%.2f  y=%.2f\n", panelId, r, c, x, y)
 			plot.Viewports[panelId] = Viewport{
 				Canvas: canvas,
-				X0: x, Y0: y,
+				X0:     x, Y0: y,
 				Width: pwidth, Height: pheight,
 			}
 		}
@@ -986,28 +1008,28 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	// Viewports for y-tics and row-strips
 	for r := 0; r < nrows; r++ {
 		y := y0 + vg.Length(r)*(pheight+sepy)
-		plot.Viewports[fmt.Sprintf("YTic-0,%d", r)] = Viewport{
+		plot.Panels[r][0].Lvp = Viewport{
 			Canvas: canvas,
-			X0: ylabelw, Y0: y,
+			X0:     ylabelw, Y0: y,
 			Width: yticsw, Height: pheight,
 		}
-		plot.Viewports[fmt.Sprintf("RowLab-0,%d", r)] = Viewport{
+		plot.Panels[r][ncols-1].Rvp = Viewport{
 			Canvas: canvas,
-			X0: width-guidesw-rowlabw, Y0: y,
+			X0:     width - guidesw - rowlabw, Y0: y,
 			Width: rowlabw, Height: pheight,
 		}
 	}
 	// Viewports for x-tics and col-strips
 	for c := 0; c < ncols; c++ {
 		x := x0 + vg.Length(c)*(pwidth+sepx)
-		plot.Viewports[fmt.Sprintf("XTic-%d,%d", nrows-1, c)] = Viewport{
+		plot.Panels[0][c].Bvp = Viewport{
 			Canvas: canvas,
-			X0: x, Y0: xlabelh,
+			X0:     x, Y0: xlabelh,
 			Width: pwidth, Height: xticsh,
 		}
-		plot.Viewports[fmt.Sprintf("ColLab-%d,%d", nrows-1, c)] = Viewport{
+		plot.Panels[nrows-1][c].Tvp = Viewport{
 			Canvas: canvas,
-			X0: x, Y0: height-titleh-collabh,
+			X0:     x, Y0: height - titleh - collabh,
 			Width: pwidth, Height: collabh,
 		}
 	}
@@ -1034,50 +1056,49 @@ func (plot *Plot) RenderVisuals() {
 	}
 
 	// Strips for facetted plots.
+	stripBG := MergeStyles(plot.Theme.StripBG, DefaultTheme.StripBG)
+	stripColor := String2Color(stripBG["fill"])
 	if len(plot.Faceting.RowStrips) > 0 {
-		group := GrobGroup{}
+		ncols := len(plot.Panels[0])
 		for r := range plot.Panels {
 			strip := plot.Faceting.RowStrips[r]
 			// TODO: Make color customizable
 			// TDOO: Add border.
-			g := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax:1,
-				color: color.NRGBA{0xcc, 0xcc, 0xcc, 0xff}}
-			group.elements = append(group.elements, g)
-			g = GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: strip,
-				angle: math.Pi / 2}
-			group.elements = append(group.elements, g)
+			plot.Panels[r][ncols-1].Rgr = []Grob{
+				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
+					fill: stripColor},
+				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+					text: strip, angle: math.Pi / 2},
+			}
 		}
-		plot.Grobs["Row-Strips"] = group
 	}
 	if len(plot.Faceting.ColStrips) > 0 {
-		group := GrobGroup{}
+		nrows := len(plot.Panels)
 		for c := range plot.Panels[0] {
 			strip := plot.Faceting.ColStrips[c]
 			// TODO: Make color customizable
 			// TDOO: Add border.
-			g := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax:1,
-				color: color.NRGBA{0xcc, 0xcc, 0xcc, 0xff}}
-			group.elements = append(group.elements, g)
-			g = GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: strip}
-			group.elements = append(group.elements, g)
-		}
-		plot.Grobs["Col-Strips"] = group
-	}
-
-
-	showX, showY := false, false
-	for r := range plot.Panels {
-		showX = r == 0
-		for c, panel := range plot.Panels[r] {
-			showY = c == 0
-			panelId := fmt.Sprintf("Panel-%d-%d", r, c)
-			panel.Draw(plot.Viewports[panelId], showX, showY)
+			plot.Panels[nrows-1][c].Tgr = []Grob{
+				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
+					fill: stripColor},
+				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+					text: strip},
+			}
 		}
 	}
 }
 
 func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
-	// Draw the background first.
+
+	// Draw strips first.
+	for _, grob := range panel.Tgr {
+		grob.Draw(panel.Tvp)
+	}
+	for _, grob := range panel.Rgr {
+		grob.Draw(panel.Rvp)
+	}
+
+	// Draw the panel background second.
 	panelBG := MergeStyles(panel.Plot.Theme.PanelBG, DefaultTheme.PanelBG)
 	// TODO: Decide how to _not_ draw something, e.g. the background?
 	GrobRect{

@@ -31,7 +31,7 @@ func (sp *StringPool) Find(s string) int {
 }
 
 func (sp *StringPool) Get(i int) string {
-	if i<0 || i>=len(sp.pool) {
+	if i < 0 || i >= len(sp.pool) {
 		return "--NA--"
 	}
 

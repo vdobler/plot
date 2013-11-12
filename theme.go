@@ -4,6 +4,7 @@ type Theme struct {
 	PointStyle, LineStyle, BarStyle AesMapping
 	TextStyle, RectStyle            AesMapping
 	PanelBG, GridMajor, GridMinor   AesMapping
+	StripBG                         AesMapping
 }
 
 var DefaultTheme = Theme{
@@ -58,6 +59,13 @@ var DefaultTheme = Theme{
 		"linetype": "solid",
 		"color":    "white",
 		"size":     "1",
+		"alpha":    "1",
+	},
+	StripBG: AesMapping{
+		"linetype": "blank",
+		"color":    "#00000000",
+		"size":     "0",
+		"fill":     "gray60",
 		"alpha":    "1",
 	},
 }

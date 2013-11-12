@@ -324,7 +324,7 @@ func (rect GrobRect) String() string {
 // Grob Group
 
 type GrobGroup struct {
-	x0, y0 float64
+	x0, y0   float64
 	elements []Grob
 }
 
@@ -333,7 +333,7 @@ var _ Grob = GrobGroup{}
 func (group GrobGroup) Draw(vp Viewport) {
 	x0, y0 := vp.X(group.x0), vp.Y(group.y0)
 	vp.Canvas.Push()
-	vp.Canvas.Translate(x0,y0)
+	vp.Canvas.Translate(x0, y0)
 	for _, g := range group.elements {
 		g.Draw(vp)
 	}
@@ -388,8 +388,8 @@ func (vp Viewport) Y(y float64) vg.Length {
 
 // XI and YI turn canvas length to natural grob coordinates [0,1].
 func (vp Viewport) XI(w vg.Length) float64 {
-	return float64((w-vp.X0)/vp.Width)
+	return float64((w - vp.X0) / vp.Width)
 }
 func (vp Viewport) YI(h vg.Length) float64 {
-	return float64((h-vp.Y0)/vp.Height)
+	return float64((h - vp.Y0) / vp.Height)
 }
