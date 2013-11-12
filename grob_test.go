@@ -26,7 +26,7 @@ func TestGraphicGrobs(t *testing.T) {
 		Height: vg.Inches(8),
 		Canvas: pngCanvas,
 	}
-	innerVP := SubViewport(allVP, 0.05, 0.05, 0.9, 0.9)
+	innerVP := allVP.Sub(0.05, 0.05, 0.9, 0.9)
 	bg := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray80"]}
 	bg.Draw(innerVP)
 
@@ -111,7 +111,7 @@ func TestGraphicGrobs(t *testing.T) {
 	}
 
 	// Draw rectangles
-	rectVP := SubViewport(innerVP, 0.1, 0.7, 0.4, 0.3)
+	rectVP := innerVP.Sub(0.1, 0.7, 0.4, 0.3)
 	rect := []Grob{}
 	bgr := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray40"]}
 	bgr.Draw(rectVP)
@@ -136,7 +136,7 @@ func TestGraphicGrobs(t *testing.T) {
 	}
 
 	// Draw path
-	pathVP := SubViewport(innerVP, 0.55, 0.7, 0.4, 0.3)
+	pathVP := innerVP.Sub(0.55, 0.7, 0.4, 0.3)
 	bgp := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray"]}
 	bgp.Draw(pathVP)
 	sin := make([]struct{ x, y float64 }, 50)
@@ -231,13 +231,13 @@ func TestTextGrobs(t *testing.T) {
 	bg := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray60"]}
 	bg.Draw(allVP)
 
-	gridVP := SubViewport(allVP, 0.1, 0.1, 0.35, 0.35)
+	gridVP := allVP.Sub(0.1, 0.1, 0.35, 0.35)
 	drawTextGrid(gridVP, 0)
-	gridVP = SubViewport(allVP, 0.55, 0.1, 0.35, 0.35)
+	gridVP = allVP.Sub(0.55, 0.1, 0.35, 0.35)
 	drawTextGrid(gridVP, 30./180*math.Pi)
-	gridVP = SubViewport(allVP, 0.1, 0.55, 0.35, 0.35)
+	gridVP = allVP.Sub(0.1, 0.55, 0.35, 0.35)
 	drawTextGrid(gridVP, 45./180*math.Pi)
-	gridVP = SubViewport(allVP, 0.55, 0.55, 0.35, 0.35)
+	gridVP = allVP.Sub(0.55, 0.55, 0.35, 0.35)
 	drawTextGrid(gridVP, 90./180*math.Pi)
 
 	pngCanvas.WriteTo(file)

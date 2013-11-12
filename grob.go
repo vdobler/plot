@@ -222,10 +222,7 @@ type GrobText struct {
 
 var _ Grob = GrobText{}
 
-func (text GrobText) Draw(vp Viewport) {
-	vp.Canvas.Push()
-	vp.Canvas.SetColor(text.color)
-	x, y := vp.X(text.x), vp.Y(text.y)
+func (text GrobText) Font() vg.Font {
 	fname := text.font
 	if fname == "" {
 		fname = "Courier-Bold"
@@ -234,6 +231,27 @@ func (text GrobText) Draw(vp Viewport) {
 	if err != nil {
 		panic(err.Error())
 	}
+	return font
+}
+
+func (text GrobText) Draw(vp Viewport) {
+	vp.Canvas.Push()
+	vp.Canvas.SetColor(text.color)
+	x, y := vp.X(text.x), vp.Y(text.y)
+	font := text.Font()
+
+	ww, hh := text.BoundingBox()
+
+	dx := ww * vg.Length(text.hjust)
+	dy := hh * vg.Length(text.vjust)
+	vp.Canvas.Translate(x-dx, y-dy)
+	vp.Canvas.Rotate(text.angle)
+	vp.Canvas.FillString(font, 0, 0, text.text)
+	vp.Canvas.Pop()
+}
+
+func (text GrobText) BoundingBox() (vg.Length, vg.Length) {
+	font := text.Font()
 
 	// Compute width ww and height hh of the rotateted bounding box.
 	w := font.Width(text.text)
@@ -243,12 +261,7 @@ func (text GrobText) Draw(vp Viewport) {
 	ww := w*z + h*vg.Length(s)
 	hh := w*vg.Length(s) + h*z
 
-	dx := ww * vg.Length(text.hjust)
-	dy := hh * vg.Length(text.vjust)
-	vp.Canvas.Translate(x-dx, y-dy)
-	vp.Canvas.Rotate(text.angle)
-	vp.Canvas.FillString(font, 0, 0, text.text)
-	vp.Canvas.Pop()
+	return ww, hh
 }
 
 func (text GrobText) String() string {
@@ -308,6 +321,30 @@ func (rect GrobRect) String() string {
 }
 
 // -------------------------------------------------------------------------
+// Grob Group
+
+type GrobGroup struct {
+	x0, y0 float64
+	elements []Grob
+}
+
+var _ Grob = GrobGroup{}
+
+func (group GrobGroup) Draw(vp Viewport) {
+	x0, y0 := vp.X(group.x0), vp.Y(group.y0)
+	vp.Canvas.Push()
+	vp.Canvas.Translate(x0,y0)
+	for _, g := range group.elements {
+		g.Draw(vp)
+	}
+	vp.Canvas.Pop()
+}
+
+func (group GrobGroup) String() string {
+	return fmt.Sprintf("Group of %d", len(group.elements))
+}
+
+// -------------------------------------------------------------------------
 // Viewport
 
 type Viewport struct {
@@ -324,7 +361,7 @@ func (vp Viewport) String() string {
 
 // SubViewport returns the area described by x0,y0,width,height in
 // natural grob coordinates [0,1] as a viewport.
-func SubViewport(vp Viewport, x0, y0, width, height float64) Viewport {
+func (vp Viewport) Sub(x0, y0, width, height float64) Viewport {
 	sub := Viewport{
 		X0:     vp.X0 + vg.Length(x0)*vp.Width,
 		Y0:     vp.Y0 + vg.Length(y0)*vp.Height,
@@ -347,4 +384,12 @@ func (vp Viewport) Y(y float64) vg.Length {
 	ans := vp.Y0 + vg.Length(y)*vp.Height
 	// fmt.Printf("Y( %.3f ) = %.1fin\n", y, ans.Inches())
 	return ans
+}
+
+// XI and YI turn canvas length to natural grob coordinates [0,1].
+func (vp Viewport) XI(w vg.Length) float64 {
+	return float64((w-vp.X0)/vp.Width)
+}
+func (vp Viewport) YI(h vg.Length) float64 {
+	return float64((h-vp.Y0)/vp.Height)
 }

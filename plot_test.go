@@ -1,7 +1,6 @@
 package plot
 
 import (
-	"code.google.com/p/plotinum/vg"
 	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
@@ -303,12 +302,7 @@ func TestSimplePlot(t *testing.T) {
 	}
 	plot.Layers = append(plot.Layers, &linReg)
 
-	file, err := os.Create("simple.png")
-	if err != nil {
-		t.Fatalf("%", err)
-	}
-	plot.Draw(vg.Inches(10), vg.Inches(7), file)
-	file.Close()
+	plot.WritePNG("simple.png", 200,150)
 }
 
 func TestFaceting(t *testing.T) {
@@ -347,12 +341,7 @@ func TestFaceting(t *testing.T) {
 			}}}
 	plot.Layers = append(plot.Layers, &hist)
 
-	file, err := os.Create("hist.png")
-	if err != nil {
-		t.Fatalf("%", err)
-	}
-	plot.Draw(vg.Inches(10), vg.Inches(7), file)
-	file.Close()
+	plot.WritePNG("hist.png", 200,150)
 }
 
 func TestDiscreteXScale(t *testing.T) {
@@ -373,10 +362,5 @@ func TestDiscreteXScale(t *testing.T) {
 	}
 	plot.Layers = append(plot.Layers, &rawData)
 
-	file, err := os.Create("discrx.png")
-	if err != nil {
-		t.Fatalf("%", err)
-	}
-	plot.Draw(vg.Inches(10), vg.Inches(7), file)
-	file.Close()
+	plot.WritePNG("discrx.png", 200,150)
 }
