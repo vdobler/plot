@@ -227,7 +227,7 @@ func (text GrobText) Font() vg.Font {
 	if fname == "" {
 		fname = "Courier-Bold"
 	}
-	font, err := vg.MakeFont(fname, vg.Points(text.size))
+	font, err := vg.MakeFont(fname, vg.Length(text.size))
 	if err != nil {
 		panic(err.Error())
 	}
@@ -241,13 +241,23 @@ func (text GrobText) Draw(vp Viewport) {
 	font := text.Font()
 
 	ww, hh := text.BoundingBox()
-
+	// w := font.Width(text.text)
+	h := font.Extents().Ascent
 	dx := ww * vg.Length(text.hjust)
 	dy := hh * vg.Length(text.vjust)
+	if text.angle <= math.Pi/2 {
+		dx -= h * vg.Length(math.Sin(text.angle))
+	} else if text.angle <= math.Pi {
+		dx -= ww
+		dy += h * vg.Length(math.Cos(text.angle))
+	} else {
+		panic("Implement me....")
+	}
 	vp.Canvas.Translate(x-dx, y-dy)
 	vp.Canvas.Rotate(text.angle)
 	vp.Canvas.FillString(font, 0, 0, text.text)
 	vp.Canvas.Pop()
+
 }
 
 func (text GrobText) BoundingBox() (vg.Length, vg.Length) {
@@ -370,7 +380,6 @@ func (vp Viewport) Sub(x0, y0, width, height float64) Viewport {
 		Canvas: vp.Canvas,
 	}
 
-	fmt.Printf("SubVieport(width=%.2f) Width=%.2fin\n", width, sub.Width.Inches())
 	return sub
 }
 
@@ -388,7 +397,7 @@ func (vp Viewport) Y(y float64) vg.Length {
 
 // XI and YI turn canvas length to natural grob factors.
 func (vp Viewport) XI(w vg.Length) float64 {
-	return float64(w  / vp.Width)
+	return float64(w / vp.Width)
 }
 func (vp Viewport) YI(h vg.Length) float64 {
 	return float64(h / vp.Height)

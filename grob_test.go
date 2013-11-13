@@ -5,6 +5,7 @@ import (
 	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"testing"
 )
@@ -178,7 +179,6 @@ func TestGraphicGrobs(t *testing.T) {
 func drawTextGrid(vp Viewport, angle float64) {
 	black := BuiltinColors["black"]
 	white := BuiltinColors["white"]
-	println(angle)
 	GrobLine{x0: 0, y0: 0, x1: 1, y1: 0, size: 1, linetype: SolidLine, color: white}.Draw(vp)
 	GrobLine{x0: 0, y0: 0.5, x1: 1, y1: 0.5, size: 1, linetype: SolidLine, color: white}.Draw(vp)
 	GrobLine{x0: 0, y0: 1, x1: 1, y1: 1, size: 1, linetype: SolidLine, color: white}.Draw(vp)
@@ -187,7 +187,7 @@ func drawTextGrid(vp Viewport, angle float64) {
 	GrobLine{x0: 1, y0: 0, x1: 1, y1: 1, size: 1, linetype: SolidLine, color: white}.Draw(vp)
 
 	for _, vjust := range []float64{0, 0.5, 1} {
-		size := 10.0 + 4*vjust
+		size := 10.0 // 10.0 + 4*vjust
 		for _, hjust := range []float64{0, 0.5, 1} {
 			fname := ""
 			if hjust == 0.5 {
@@ -195,10 +195,12 @@ func drawTextGrid(vp Viewport, angle float64) {
 			} else if hjust == 1 {
 				fname = "Times-Bold"
 			}
+			npad := rand.Intn(10)
+			pad := "(){}[]abxyABWH"[:npad]
 			t := GrobText{
 				x:     hjust,
 				y:     vjust,
-				text:  fmt.Sprintf("%.1f/%.1f", hjust, vjust),
+				text:  fmt.Sprintf("%.1f/%.1f%s", hjust, vjust, pad),
 				size:  size,
 				color: black,
 				vjust: vjust,
@@ -234,9 +236,9 @@ func TestTextGrobs(t *testing.T) {
 	gridVP := allVP.Sub(0.1, 0.1, 0.35, 0.35)
 	drawTextGrid(gridVP, 0)
 	gridVP = allVP.Sub(0.55, 0.1, 0.35, 0.35)
-	drawTextGrid(gridVP, 30./180*math.Pi)
-	gridVP = allVP.Sub(0.1, 0.55, 0.35, 0.35)
 	drawTextGrid(gridVP, 45./180*math.Pi)
+	gridVP = allVP.Sub(0.1, 0.55, 0.35, 0.35)
+	drawTextGrid(gridVP, 135./180*math.Pi)
 	gridVP = allVP.Sub(0.55, 0.55, 0.35, 0.35)
 	drawTextGrid(gridVP, 90./180*math.Pi)
 
