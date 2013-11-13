@@ -716,7 +716,6 @@ func (plot *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
 		for c, panel := range plot.Panels[r] {
 			showY = c == 0
 			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
-			fmt.Printf("Drawing Panel %s: %+v\n", panelId, plot.Viewports[panelId])
 			panel.Draw(plot.Viewports[panelId], showX, showY)
 		}
 	}
@@ -932,7 +931,9 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	var titleh vg.Length
 	if t, ok := plot.Grobs["Title"]; ok {
 		_, titleh = t.(GrobText).BoundingBox()
+		fmt.Printf("titleh = %.1f mm\n", titleh.Millimeters())
 		titleh += vg.Millimeters(2) // TODO: make configurable
+		fmt.Printf("titleh = %.1f mm\n", titleh.Millimeters())
 	}
 
 	var ylabelw vg.Length
@@ -975,7 +976,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	// Col- and Row-Labels, X- and Y-Tics
 	var xticsh, yticsw vg.Length
 	var collabh, rowlabw vg.Length
-	yticsw = vg.Millimeters(20)  // TODO
+	yticsw = plot.yTicsWidth()
 	xticsh = vg.Millimeters(10)  // TODO
 	collabh = vg.Millimeters(10) // TODO
 	rowlabw = vg.Millimeters(10) // TODO
@@ -1036,39 +1037,76 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 
 }
 
+// yTicsWidth computes the width needed to display the y tics.
+func (plot *Plot) yTicsWidth() vg.Length {
+	// Look for longest label.
+	var max vg.Length
+	style := MergeStyles(plot.Theme.TicLabel, DefaultTheme.TicLabel)
+	size := String2Float(style["size"], 4, 36)
+	angle := String2Float(style["angle"], 0, 2*math.Pi)
+	for r := range plot.Panels {
+		sy := plot.Panels[r][0].Scales["y"]
+		for _, label := range sy.Labels {
+			w, h := GrobText{text: label, size: size, angle: angle}.BoundingBox()
+			fmt.Printf("BB of %q at %.1f: %.1f x %.1f mm²\n", label, size,
+				w.Millimeters(), h.Millimeters())
+			if w > max {
+				max = w
+			}
+		}
+	}
+
+	// Add length of tic and distance.
+	tic := MergeStyles(plot.Theme.Tic, DefaultTheme.Tic)
+	max += vg.Length(String2Float(tic["length"], 0, 1000))
+	max += vg.Length(String2Float(style["sep"], 0, 1000))
+
+	return max
+}
+
 // -------------------------------------------------------------------------
 // Step 8: Render remaining parts of plot
 
 func (plot *Plot) RenderVisuals() {
 	// Title, X-Label and Y-Label.
 	if plot.Title != "" {
-		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: plot.Title}
+		style := MergeStyles(plot.Theme.Title, DefaultTheme.Title)
+		size := String2Float(style["size"], 0, 100)
+		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+			text: plot.Title, size: size}
 		plot.Grobs["Title"] = g
 	}
 	if name := plot.Scales["x"].Name; name != "" {
-		g := GrobText{x: 0.5, y: 0.1, vjust: 0, hjust: 0.5, text: name}
+		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
+		size := String2Float(style["size"], 0, 100)
+		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+			text: name, size: size}
 		plot.Grobs["X-Label"] = g
 	}
 	if name := plot.Scales["y"].Name; name != "" {
-		g := GrobText{x: 0.1, y: 0.5, vjust: 0.5, hjust: 0.5, text: name,
-			angle: math.Pi / 2}
+		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
+		size := String2Float(style["size"], 0, 100)
+		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: name,
+			angle: math.Pi / 2, size: size}
 		plot.Grobs["Y-Label"] = g
 	}
 
 	// Strips for facetted plots.
-	stripBG := MergeStyles(plot.Theme.StripBG, DefaultTheme.StripBG)
-	stripColor := String2Color(stripBG["fill"])
+	strip := MergeStyles(plot.Theme.Strip, DefaultTheme.Strip)
+	stripBG := String2Color(strip["fill"])
+	stripCol := String2Color(strip["color"])
+	stripSize := String2Float(strip["size"], 4, 100)
 	if len(plot.Faceting.RowStrips) > 0 {
 		ncols := len(plot.Panels[0])
 		for r := range plot.Panels {
 			strip := plot.Faceting.RowStrips[r]
-			// TODO: Make color customizable
 			// TDOO: Add border.
 			plot.Panels[r][ncols-1].Rgr = []Grob{
 				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
-					fill: stripColor},
+					fill: stripBG},
 				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-					text: strip, angle: math.Pi / 2},
+					text: strip, angle: math.Pi / 2,
+					size: stripSize, color: stripCol},
 			}
 		}
 	}
@@ -1076,13 +1114,13 @@ func (plot *Plot) RenderVisuals() {
 		nrows := len(plot.Panels)
 		for c := range plot.Panels[0] {
 			strip := plot.Faceting.ColStrips[c]
-			// TODO: Make color customizable
 			// TDOO: Add border.
 			plot.Panels[nrows-1][c].Tgr = []Grob{
 				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
-					fill: stripColor},
+					fill: stripBG},
 				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-					text: strip},
+					text: strip, angle: 0,
+					size: stripSize, color: stripCol},
 			}
 		}
 	}
@@ -1101,6 +1139,7 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 		grob.Draw(panel.Tvp)
 	}
 	for _, grob := range panel.Rgr {
+		fmt.Printf("Right: %s\n", grob.String())
 		grob.Draw(panel.Rvp)
 	}
 

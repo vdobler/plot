@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// String2Float parses s into a float64. The output is clipped to the
+// interval [low,high]. The string s may end in some common units,
+// namely %, °, pt, mm, cm and in.
 func String2Float(s string, low, high float64) float64 {
 	factor := 1.0
 	if strings.HasSuffix(s, "%") {
@@ -16,12 +19,25 @@ func String2Float(s string, low, high float64) float64 {
 	} else if strings.HasSuffix(s, "°") {
 		s = s[:len(s)-1]
 		factor = math.Pi / 180
+	} else if strings.HasSuffix(s, "pt") {
+		s = s[:len(s)-2]
+		factor = 1
+	} else if strings.HasSuffix(s, "mm") {
+		s = s[:len(s)-2]
+		factor = 2.83464567
+	} else if strings.HasSuffix(s, "cm") {
+		s = s[:len(s)-2]
+		factor = 28.3464567
+	} else if strings.HasSuffix(s, "in") {
+		s = s[:len(s)-2]
+		factor = 72
 	}
+	s = strings.TrimSpace(s)
 
 	value, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		// fmt.Printf("Cannot parse style %q as float: %s", s, err.Error())
-		return 0.5
+		fmt.Printf("Cannot parse style %q as float: %s\n", s, err.Error())
+		return 1
 	}
 	value *= factor
 
@@ -169,6 +185,9 @@ func String2Color(s string) color.Color {
 }
 
 func Color2String(c color.Color) string {
+	if c == nil {
+		return ""
+	}
 	r, g, b, a := c.RGBA()
 	r >>= 8
 	g >>= 8

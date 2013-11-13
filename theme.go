@@ -4,7 +4,8 @@ type Theme struct {
 	PointStyle, LineStyle, BarStyle AesMapping
 	TextStyle, RectStyle            AesMapping
 	PanelBG, GridMajor, GridMinor   AesMapping
-	StripBG                         AesMapping
+	Strip, TicLabel, Tic            AesMapping
+	Title, Label                    AesMapping
 }
 
 var DefaultTheme = Theme{
@@ -61,11 +62,34 @@ var DefaultTheme = Theme{
 		"size":     "1",
 		"alpha":    "1",
 	},
-	StripBG: AesMapping{
-		"linetype": "blank",
-		"color":    "#00000000",
-		"size":     "0",
-		"fill":     "gray60",
+	Tic: AesMapping{
+		"linetype": "solid",
+		"color":    "black",
+		"size":     "2",
+		"length":   "2 mm",
 		"alpha":    "1",
+	},
+	TicLabel: AesMapping{
+		"color": "black",
+		"size":  "12 pt",
+		"alpha": "0°",
+		"sep":   "0.5 mm",
+	},
+	Strip: AesMapping{
+		"linetype": "blank",
+		"color":    "black",  // Color of text
+		"size":     "10 pt",  // Font size
+		"fill":     "gray60", // Background color
+		"alpha":    "1",
+	},
+	Title: AesMapping{
+		"color": "black",
+		"size":  "16 pt",
+		"alpha": "1",
+	},
+	Label: AesMapping{
+		"color": "black",
+		"size":  "14 pt",
+		"alpha": "1",
 	},
 }
