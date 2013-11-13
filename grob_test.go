@@ -5,7 +5,6 @@ import (
 	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"testing"
 )
@@ -195,12 +194,10 @@ func drawTextGrid(vp Viewport, angle float64) {
 			} else if hjust == 1 {
 				fname = "Times-Bold"
 			}
-			npad := rand.Intn(10)
-			pad := "(){}[]abxyABWH"[:npad]
 			t := GrobText{
 				x:     hjust,
 				y:     vjust,
-				text:  fmt.Sprintf("%.1f/%.1f%s", hjust, vjust, pad),
+				text:  fmt.Sprintf("%.1f/%.1f", hjust, vjust),
 				size:  size,
 				color: black,
 				vjust: vjust,
