@@ -490,7 +490,8 @@ func Levels(df *DataFrame, field string) FloatSet {
 		panic(fmt.Sprintf("No such field %q in data frame %q.", field, df.Name))
 	}
 	if !t.Discrete() {
-		panic(fmt.Sprintf("Field %q (%s) in data frame %q is not discrete.", field, t, df.Name))
+		panic(fmt.Sprintf("Field %q (%s) in data frame %q is not discrete.",
+			field, t.Type, df.Name))
 	}
 
 	return df.Columns[field].Levels()
