@@ -142,12 +142,15 @@ func (p GeomLine) Construct(df *DataFrame, panel *Panel) []Fundamental {
 }
 
 func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
+	fmt.Printf("GeomLine.Render %d\n", data.N)
 	x, y := data.Columns["x"], data.Columns["y"]
 	grobs := make([]Grob, 0)
 	colFunc := makeColorFunc("color", data, panel, style)
 	sizeFunc := makePosFunc("size", data, panel, style)
 	alphaFunc := makePosFunc("alpha", data, panel, style)
 	typeFunc := makeStyleFunc("linetype", data, panel, style)
+
+	scaleX, scaleY := panel.Scales["x"], panel.Scales["y"]
 
 	// TODO: Grouping
 
@@ -158,10 +161,10 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 		// TODO: instead "of by one" why not use average?
 		for i := 0; i < data.N-1; i++ {
 			line := GrobLine{
-				x0:       x.Data[i],
-				y0:       y.Data[i],
-				x1:       x.Data[i+1],
-				y1:       y.Data[i+1],
+				x0:       scaleX.Pos(x.Data[i]),
+				y0:       scaleY.Pos(y.Data[i]),
+				x1:       scaleX.Pos(x.Data[i+1]),
+				y1:       scaleY.Pos(y.Data[i+1]),
 				color:    SetAlpha(colFunc(i), alphaFunc(i)),
 				size:     sizeFunc(i),
 				linetype: LineType(typeFunc(i)),
@@ -172,8 +175,8 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 		// All segemtns have same color, linetype and size, use a GrobPath
 		points := make([]struct{ x, y float64 }, data.N)
 		for i := 0; i < data.N; i++ {
-			points[i].x = x.Data[i]
-			points[i].y = y.Data[i]
+			points[i].x = scaleX.Pos(x.Data[i])
+			points[i].y = scaleY.Pos(y.Data[i])
 		}
 		path := GrobPath{
 			points:   points,
@@ -181,6 +184,7 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 			size:     sizeFunc(0),
 			linetype: LineType(typeFunc(0)),
 		}
+		fmt.Printf("path == %s\n", path.String())
 		grobs = append(grobs, path)
 	}
 
