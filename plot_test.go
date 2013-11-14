@@ -5,8 +5,13 @@ import (
 	"fmt"
 	"image/color"
 	"os"
+	"reflect"
 	"testing"
 )
+
+func same(a1, a2 interface{}) bool {
+	return reflect.DeepEqual(a1, a2)
+}
 
 func TestStatBin(t *testing.T) {
 	pool := NewStringPool()
@@ -302,7 +307,6 @@ func TestSimplePlot(t *testing.T) {
 	}
 	plot.Layers = append(plot.Layers, &linReg)
 
-	plot.Create()
 	plot.WritePNG("simple.png", 800, 600)
 }
 
@@ -341,7 +345,6 @@ func TestFaceting(t *testing.T) {
 				"fill": "gray20",
 			}}}
 	plot.Layers = append(plot.Layers, &hist)
-	plot.Create()
 	plot.WritePNG("hist.png", 800, 600)
 }
 
@@ -362,7 +365,6 @@ func TestDiscreteXScale(t *testing.T) {
 		Geom: GeomPoint{},
 	}
 	plot.Layers = append(plot.Layers, &rawData)
-	plot.Create()
 
 	plot.WritePNG("discrx.png", 800, 600)
 }

@@ -327,27 +327,6 @@ type Fundamental struct {
 	Data *DataFrame
 }
 
-func contains(s []string, t string) bool {
-	for _, ss := range s {
-		if t == ss {
-			return true
-		}
-	}
-	return false
-}
-
-func same(s []string, t []string) bool {
-	if len(s) != len(t) {
-		return false
-	}
-	for _, x := range s {
-		if !contains(t, x) {
-			return false
-		}
-	}
-	return true
-}
-
 // -------------------------------------------------------------------------
 // Step 2: Preparing Data and Scales
 
@@ -380,9 +359,17 @@ func (panel *Panel) PrepareData() {
 		// Drop all unused (unmapped) fields in the data frame.
 		_, fields := aes.Used(false)
 		for _, f := range layer.Data.FieldNames() {
-			if contains(fields, f) {
+			found := false
+			for _, ss := range fields {
+				if f == ss {
+					found = true
+					break
+				}
+			}
+			if found {
 				continue
 			}
+
 			delete(layer.Data.Columns, f)
 		}
 
@@ -399,11 +386,7 @@ func (panel *Panel) PrepareData() {
 			if !ok {
 				continue
 			}
-			// fmt.Printf("PrepData: Before training Scale %s on panel %s layer %s: [ %.2f, %.2f ]\n",
-			//	a, panel.Name, layer.Name, scale.DomainMin, scale.DomainMax)
 			scale.Train(layer.Data.Columns[a])
-			// fmt.Printf("PrepData: After training Scale %s on panel %s layer %s: [ %.2f, %.2f ]\n",
-			//	a, panel.Name, layer.Name, scale.DomainMin, scale.DomainMax)
 		}
 	}
 }
@@ -1270,23 +1253,7 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 }
 
 // -------------------------------------------------------------------------
-// Misc
-
-func UniqueStrings(s []string) (u []string) {
-	if len(s) <= 1 {
-		return s
-	}
-	sort.Strings(s)
-	t := s[0]
-	for i := 1; i <= len(s); i++ {
-		if s[i] == t {
-			continue
-		}
-		t = s[i]
-		u = append(u, t)
-	}
-	return u
-}
+// Aesthetic Mapping
 
 // AesMapping controlls the mapping of fields of a data frame to aesthetics.
 // The zero value of AesMapping is the identity mapping.
