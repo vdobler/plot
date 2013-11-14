@@ -575,7 +575,6 @@ func (layer *Layer) ComputeStatistics() {
 
 	// TODO: all handling related code
 	/***********************************************************
-		handling := layer.Stat.Info().ExtraFieldHandling
 
 		// Make sure all excess fields are discrete and abort on
 		// any continuous field.
@@ -590,10 +589,25 @@ func (layer *Layer) ComputeStatistics() {
 		}
 	        *************************************************************/
 
-	// Do the transform recursively. Step 3b
-	before := fmt.Sprintf("%s %d %v", layer.Stat.Name(), layer.Data.N,
-		layer.Data.FieldNames())
-	layer.Data = applyRec(layer.Data, layer.Stat, layer.Panel, additionalFields.Elements())
+	before := fmt.Sprintf("%s %d %v", layer.Stat.Name(), layer.Data.N, layer.Data.FieldNames())
+
+	handling := layer.Stat.Info().ExtraFieldHandling
+	switch handling {
+	case FailOnExtraFields:
+		if len(additionalFields) > 0 {
+			layer.Panel.Plot.Warnf(
+				"Cannot apply stat %s to %s on layer %s: additional fields %v present",
+				layer.Stat.Name(), layer.Data.Name, layer.Name, additionalFields)
+		}
+		layer.Data = nil
+	case IgnoreExtraFields:
+		// Do simple transform. Step 3.
+		layer.Data = layer.Stat.Apply(layer.Data, layer.Panel)
+	case GroupOnExtraFields:
+		// Do the transform recursively. Step 3b
+		layer.Data = applyRec(layer.Data, layer.Stat, layer.Panel, additionalFields.Elements())
+	}
+
 	if layer.Data != nil {
 		fmt.Printf("Layer %q: ComputeStatistics() %s --> %d %v\n",
 			layer.Name, before, layer.Data.N, layer.Data.FieldNames())
