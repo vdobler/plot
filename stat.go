@@ -354,3 +354,56 @@ func (s StatLabel) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	return result
 
 }
+
+// -------------------------------------------------------------------------
+// StatFunction
+
+// StatFunction draws the functions F interpolating it by N points.
+type StatFunction struct {
+	F func(x float64) float64
+	N int
+}
+
+var _ Stat = StatFunction{}
+
+func (StatFunction) Name() string { return "StatFunction" }
+
+func (StatFunction) Info() StatInfo {
+	return StatInfo{
+		NeededAes:          []string{},
+		OptionalAes:        []string{},
+		ExtraFieldHandling: IgnoreExtraFields,
+	}
+}
+
+func (s StatFunction) Apply(data *DataFrame, panel *Panel) *DataFrame {
+	sx := panel.Scales["x"]
+	n := s.N
+	if n == 0 {
+		n = 101
+	}
+	xmin, xmax := sx.DomainMin, sx.DomainMax // TODO
+	fmt.Printf("StatFunction %.2f -- %.2f\n", xmin, xmax)
+
+	delta := (xmax - xmin) / float64(n-1)
+
+	result := NewDataFrame("function", data.Pool)
+	result.N = n
+	xf := NewField(n, Float, data.Pool)
+	yf := NewField(n, Float, data.Pool)
+
+	for i := 0; i < n; i++ {
+		x := xmin + float64(i)*delta
+		xf.Data[i] = x
+		yf.Data[i] = s.F(x)
+		if i%10 == 0 {
+			fmt.Printf("sin:  x=%.2f  y=%.2f\n", x, yf.Data[i])
+		}
+	}
+
+	result.Columns["x"] = xf
+	result.Columns["y"] = yf
+
+	return result
+
+}

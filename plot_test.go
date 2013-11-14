@@ -4,6 +4,7 @@ import (
 	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
+	"math"
 	"os"
 	"testing"
 )
@@ -306,6 +307,24 @@ func TestSimplePlot(t *testing.T) {
 		GeomMapping: nil,
 	}
 	plot.Layers = append(plot.Layers, &linReg)
+
+	function := Layer{
+		Name: "Sinus",
+		Stat: &StatFunction{
+			F: func(x float64) float64 {
+				return 10*math.Sin(40*x) + 75
+			},
+		},
+		Geom: GeomLine{
+			Style: AesMapping{
+				"color":    "blue",
+				"linetype": "solid",
+				"size":     "1",
+			},
+		},
+		GeomMapping: nil,
+	}
+	plot.Layers = append(plot.Layers, &function)
 
 	plot.WritePNG("simple.png", 800, 600)
 }
