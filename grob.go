@@ -169,7 +169,6 @@ type GrobPath struct {
 var _ Grob = GrobPath{}
 
 func (path GrobPath) Draw(vp Viewport) {
-	fmt.Printf("GrobPath.Draw: %s\n", path.String())
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(path.color)
 	vp.Canvas.SetLineWidth(vg.Points(path.size))
@@ -180,7 +179,6 @@ func (path GrobPath) Draw(vp Viewport) {
 	p.Move(x, y)
 	for i := 1; i < len(path.points); i++ {
 		x, y = vp.X(path.points[i].x), vp.Y(path.points[i].y)
-		fmt.Printf("  %d: %.1f %.1f\n", i, x, y)
 		p.Line(x, y)
 	}
 	vp.Canvas.Stroke(p)
