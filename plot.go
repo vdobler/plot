@@ -22,10 +22,11 @@ type Plot struct {
 	// The title of the plot.
 	Title string
 
-	// Data is the data to draw.
+	// Data is the data to draw. If nil all layers must provide their
+	// own data.
 	Data *DataFrame
 
-	// Faceting describes the Used Faceting
+	// Faceting describes the used Faceting.
 	Faceting Faceting
 
 	// Mapping describes how fieleds in data are mapped to Aesthetics.
@@ -41,7 +42,7 @@ type Plot struct {
 	// only and are not used directly as scales.
 	Scales map[string]*Scale
 
-	// Panels are the different panels for faceting
+	// Panels are the different panels for faceting.
 	Panels [][]*Panel
 
 	// Theme contains the visual defaults to use when drawing things.
@@ -50,11 +51,18 @@ type Plot struct {
 	// Layout maps components like "Title" or "Y-Label" to their viewport.
 	Viewports map[string]Viewport
 
+	// Pool is the string pool used to keep the string-float64 mapping
 	Pool *StringPool
 
+	// Grobs contains the handful of plot (not part of panels) of
+	// graphical objects.
 	Grobs map[string]Grob
+
+	constructed bool
 }
 
+// NewPlot creates a new plot. Data must be a SOM or a COS and aesthetics
+// maps fields in data to plot aesthetics.
 func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
 	pool := NewStringPool()
 	df, err := NewDataFrameFrom(data, pool)
@@ -67,26 +75,153 @@ func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
 	}
 
 	plot := Plot{
-		Data:     df,
-		Faceting: Faceting{},
-		Aes:      aesthetics,
-		Layers:   nil,
-		Scales:   make(map[string]*Scale),
-		Panels:   nil,
-		Theme:    DefaultTheme,
-		Pool:     pool,
-		Grobs:    make(map[string]Grob),
+		Data:        df,
+		Faceting:    Faceting{},
+		Aes:         aesthetics,
+		Layers:      nil,
+		Scales:      make(map[string]*Scale),
+		Panels:      nil,
+		Theme:       DefaultTheme,
+		Pool:        pool,
+		Grobs:       make(map[string]Grob),
+		constructed: false,
 	}
 
 	return &plot, nil
 }
 
+// Compute facets the plot data, computes the statistics, constructs the
+// geoms, scales the axes and prepares everything for rendering the plot.
+func (plot *Plot) Compute() {
+	plot.CreatePanels()
+
+	for r := range plot.Panels {
+		for c := range plot.Panels[r] {
+			panel := plot.Panels[r][c]
+
+			// Prepare data: map aestetics, add scales, clean data frame and
+			// apply scale transformations. Mapped scales are pre-trained.
+			// Step 2
+			panel.PrepareData()
+
+			// The second step: Compute statistics.
+			// If a layer has a statistical transform: Apply this transformation
+			// to the data frame of this layer.
+			// Step 3
+			panel.ComputeStatistics()
+
+			// Make sure the output of the stat matches the input expected
+			// by the geom.
+			// Step 4
+			panel.WireStatToGeom()
+
+			// Construct geoms
+			// Apply geom specific position adjustments, train the involved
+			// scales and produce a set of fundamental geoms.
+			// Step 5
+			panel.ConstructGeoms()
+		}
+	}
+
+	for r := range plot.Panels {
+		for _, panel := range plot.Panels[r] {
+
+			// Finalize scales: Setup remaining fields.
+			// This can be done only after each panel completed
+			// the steps 2-5 ConstructGeoms which might change
+			// the scales.
+			// Step 6
+			panel.FinalizeScales()
+		}
+	}
+
+	fmt.Printf("X-Scale\n%s\n", plot.Scales["x"].String())
+	fmt.Printf("Y-Scale\n%s\n", plot.Scales["y"].String())
+	if cs, ok := plot.Scales["fill"]; ok {
+		fmt.Printf("Fill-Scale\n%s\n", cs.String())
+	}
+
+	for r := range plot.Panels {
+		for _, panel := range plot.Panels[r] {
+			// Render the fundamental Geoms to Grobs using scales.
+			// Step 7
+			panel.RenderGeoms()
+		}
+	}
+
+	// Render rest of elements (guides, titels, factting, ...)
+	// Step 8
+	plot.RenderVisuals()
+
+	plot.constructed = true
+}
+
+// DumpTo will render plot to canvas. The size of the generetad plot is
+// determined by width and height.
+func (plot *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
+	if !plot.constructed {
+		plot.Compute()
+	}
+
+	// Layouting the plot determines the viewports of all the elements
+	// in the plot, especially the panels.
+	plot.Layout(canvas, width, height)
+
+	// Actual drawing of the general stuff.
+	for _, element := range []string{"Title", "X-Label", "Y-Label"} {
+		if grob, ok := plot.Grobs[element]; ok {
+			grob.Draw(plot.Viewports[element])
+		}
+	}
+
+	// TODO: Guides
+
+	// Drawing of the individual panels.
+	showX, showY := false, false
+	for r := range plot.Panels {
+		showX = r == 0
+		for c, panel := range plot.Panels[r] {
+			showY = c == 0
+			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
+			panel.Draw(plot.Viewports[panelId], showX, showY)
+		}
+	}
+}
+
+// WritePNG renders plot to a png file of size width x height.
+func (p *Plot) WritePNG(filename string, width, height vg.Length) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	canvas := vgimg.PngCanvas{Canvas: vgimg.New(width, height)}
+	p.DumpTo(canvas, width, height)
+	canvas.WriteTo(file)
+	return nil
+}
+
+// Warnf prints args formated by f. TODO: proper error handling?
+func (p *Plot) Warnf(f string, args ...interface{}) {
+	if !strings.HasSuffix(f, "\n") {
+		f = f + "\n"
+	}
+	fmt.Printf("Warning "+f, args...)
+}
+
+// -------------------------------------------------------------------------
+// Layers, Panels and Faceting
+
 // Layer represents one layer of data in a plot.
 type Layer struct {
-	Panel *Panel
-	Name  string
+	// The Name of the layer used used in printing.
+	Name string
 
-	// A nil Data will use the Data from the plot this Layer belongs to.
+	// Panel is the Panal this Layer belogs to.
+	Panel *Panel
+
+	// A nil Data will use the Data from the plot this layer belongs to.
 	Data *DataFrame
 
 	// DataMapping is combined with the plot's AesMapping and used to
@@ -94,22 +229,24 @@ type Layer struct {
 	DataMapping AesMapping
 
 	// Stat is the statistical transformation used in this layer.
+	// A nil stat is the identity transformation.
 	Stat Stat
 
-	// New (i.e. generated by the stat) fields may be mapped to
-	// aesthetics with StatMapping
+	// StatMapping is used to map new (i.e. generated by the stat) fields
+	// to plot aesthetics.
 	StatMapping AesMapping
 
 	// Geom is the geom to use for this layer.
 	Geom Geom
 
-	// The fundamental geoms to draw.
-	Fundamentals []Fundamental
-
 	// GeomMapping is used to wire fields output by the statistical
 	// transform to the input fields used by the geom.
 	GeomMapping AesMapping
 
+	// The fundamental geoms to draw.
+	Fundamentals []Fundamental
+
+	// Grobs contains the graphical object after drawing.
 	Grobs []Grob
 }
 
@@ -117,8 +254,10 @@ type Layer struct {
 // It does not differ much from a Plot as it actually represents
 // one of the plots in a facetted plot.
 type Panel struct {
+	// Name of the Panel
 	Name string
 
+	// The plot this panel belongs to
 	Plot *Plot
 
 	// Data is the data to draw.
@@ -134,14 +273,16 @@ type Panel struct {
 	// share all scales, but x and y might be free on faceted plots.
 	Scales map[string]*Scale
 
-	// Viewport
+	// The viewport this panel will be draw to.
 	Viewport Viewport
 
 	// Grobs contains the non-layer grobs like panel background
 	// and grid lines.
 	Grobs []Grob
 
-	// Top, Right, Buttom and Left viewports and grobs. TODO: a bit ugly...
+	// Top, Right, Buttom and Left viewports and grobs.
+	// Used for axis and strips.
+	// TODO: a bit ugly...
 	Tvp, Rvp, Bvp, Lvp Viewport
 	Tgr, Rgr, Bgr, Lgr []Grob
 }
@@ -149,33 +290,41 @@ type Panel struct {
 // Facetting describes the facetting to use. The zero value indicates
 // no facetting.
 type Faceting struct {
-	// Columns and Rows are the faceting specification. Each may be a comma
-	// seperated list of fields in the Data. An empty string means no
-	// faceting in this dimension.
+	// Columns and Rows are the faceting specification. Each may be a
+	// field in the Data. An empty string means no faceting in this
+	// dimension.
 	Columns, Rows string
 
-	// Totals controlls display of totals.
+	// Totals controlls display of row and column totals.
 	Totals bool // TODO: fancier control needed
 
-	FreeScale string // "": fixed, "x": x is free, "y": y is free, "xy": both are free
+	// FreeScale determines which scales are free i.e. not shared
+	// between rows and/or columns:
+	//     ""    all scales shared
+	//     "x"   x is free (might be different on each column)
+	//     "y"   y is free (might be different on each row)
+	//     "xy"  both x and y are free
+	// (This is different from ggplot2. Here each row will share a common
+	// x-sclae and each row will share a common y-scale.)
+	FreeScale string
 
-	FreeSpace string // as FreeScale but for width and height of panels
+	// FreeSpace determines which dimension of a panel has fixed
+	// size and which are free on a per row and/or column base.
+	// Arguments like FreeScale.  BUG: Currently not implemented.
+	FreeSpace string
 
-	// TODO: Decide how to set manually.
-	ColStrips []string
-	RowStrips []string
+	// ColStrips and RowStrips contain the strip labels.
+	// TODO: decide how to set manually.
+	ColStrips, RowStrips []string
 }
 
+// Fundamental is a simple geometrical object.
 type Fundamental struct {
+	// Geom is one if the few fundamental Geoms.
 	Geom Geom
-	Data *DataFrame
-}
 
-func (p *Plot) Warnf(f string, args ...interface{}) {
-	if !strings.HasSuffix(f, "\n") {
-		f = f + "\n"
-	}
-	fmt.Printf("Warning "+f, args...)
+	// Data is the data for the fundamental geom.
+	Data *DataFrame
 }
 
 func contains(s []string, t string) bool {
@@ -629,113 +778,69 @@ func (p *Panel) RenderGeoms() {
 }
 
 // -------------------------------------------------------------------------
-// Plot drawing
+// Step 8: Render remaining parts of plot
 
-// Draw generates all parts of the plot and renders the output.
-func (plot *Plot) Create() {
-	plot.CreatePanels()
+func (plot *Plot) RenderVisuals() {
+	// Title, X-Label and Y-Label.
+	if plot.Title != "" {
+		style := MergeStyles(plot.Theme.Title, DefaultTheme.Title)
+		size := String2Float(style["size"], 0, 100)
+		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+			text: plot.Title, size: size}
+		plot.Grobs["Title"] = g
+	}
+	if name := plot.Scales["x"].Name; name != "" {
+		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
+		size := String2Float(style["size"], 0, 100)
+		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+			text: name, size: size}
+		plot.Grobs["X-Label"] = g
+	}
+	if name := plot.Scales["y"].Name; name != "" {
+		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
+		size := String2Float(style["size"], 0, 100)
+		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: name,
+			angle: math.Pi / 2, size: size}
+		plot.Grobs["Y-Label"] = g
+	}
 
-	for r := range plot.Panels {
-		for c := range plot.Panels[r] {
-			panel := plot.Panels[r][c]
-
-			// Prepare data: map aestetics, add scales, clean data frame and
-			// apply scale transformations. Mapped scales are pre-trained.
-			// Step 2
-			panel.PrepareData()
-
-			// The second step: Compute statistics.
-			// If a layer has a statistical transform: Apply this transformation
-			// to the data frame of this layer.
-			// Step 3
-			panel.ComputeStatistics()
-
-			// Make sure the output of the stat matches the input expected
-			// by the geom.
-			// Step 4
-			panel.WireStatToGeom()
-
-			// Construct geoms
-			// Apply geom specific position adjustments, train the involved
-			// scales and produce a set of fundamental geoms.
-			// Step 5
-			panel.ConstructGeoms()
+	// Strips for facetted plots.
+	strip := MergeStyles(plot.Theme.Strip, DefaultTheme.Strip)
+	stripBG := String2Color(strip["fill"])
+	stripCol := String2Color(strip["color"])
+	stripSize := String2Float(strip["size"], 4, 100)
+	if len(plot.Faceting.RowStrips) > 0 {
+		ncols := len(plot.Panels[0])
+		for r := range plot.Panels {
+			strip := plot.Faceting.RowStrips[r]
+			// TDOO: Add border.
+			plot.Panels[r][ncols-1].Rgr = []Grob{
+				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
+					fill: stripBG},
+				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+					text: strip, angle: math.Pi / 2,
+					size: stripSize, color: stripCol},
+			}
 		}
 	}
-
-	for r := range plot.Panels {
-		for _, panel := range plot.Panels[r] {
-
-			// Finalize scales: Setup remaining fields.
-			// This can be done only after each panel completed
-			// the steps 2-5 ConstructGeoms which might change
-			// the scales.
-			// Step 6
-			panel.FinalizeScales()
+	if len(plot.Faceting.ColStrips) > 0 {
+		nrows := len(plot.Panels)
+		for c := range plot.Panels[0] {
+			strip := plot.Faceting.ColStrips[c]
+			// TDOO: Add border.
+			plot.Panels[nrows-1][c].Tgr = []Grob{
+				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
+					fill: stripBG},
+				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+					text: strip, angle: 0,
+					size: stripSize, color: stripCol},
+			}
 		}
 	}
-
-	fmt.Printf("X-Scale\n%s\n", plot.Scales["x"].String())
-	fmt.Printf("Y-Scale\n%s\n", plot.Scales["y"].String())
-	if cs, ok := plot.Scales["fill"]; ok {
-		fmt.Printf("Fill-Scale\n%s\n", cs.String())
-	}
-
-	for r := range plot.Panels {
-		for _, panel := range plot.Panels[r] {
-			// Render the fundamental Geoms to Grobs using scales.
-			// Step 7
-			panel.RenderGeoms()
-		}
-	}
-
-	// Render rest of elements (guides, titels, factting, ...)
-	// Step 8
-	plot.RenderVisuals()
-}
-
-func (plot *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
-	// TODO: make sure plot has been constructed.
-
-	// Layouting the plot determines the viewports of all the elements
-	// in the plot, especially the panels.
-	plot.Layout(canvas, width, height)
-
-	// Actual drawing of the general stuff.
-	for _, element := range []string{"Title", "X-Label", "Y-Label"} {
-		if grob, ok := plot.Grobs[element]; ok {
-			grob.Draw(plot.Viewports[element])
-		}
-	}
-	// TODO: Guides
-
-	// Drawing of the individual panels.
-	showX, showY := false, false
-	for r := range plot.Panels {
-		showX = r == 0
-		for c, panel := range plot.Panels[r] {
-			showY = c == 0
-			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
-			panel.Draw(plot.Viewports[panelId], showX, showY)
-		}
-	}
-}
-
-func (p *Plot) WritePNG(filename string, width, height vg.Length) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	canvas := vgimg.PngCanvas{Canvas: vgimg.New(width, height)}
-	p.DumpTo(canvas, width, height)
-	canvas.WriteTo(file)
-	return nil
 }
 
 // -------------------------------------------------------------------------
-// Panel creation and layout.
+// Panel creation
 
 // CreatePanels populates p.Panels, governed by p.Faceting.
 //
@@ -902,19 +1007,19 @@ Layout and names of the viewports:
   +----------------------------------------------------------------------+
   |                                 Title                                |
   +----+---+------------+--+------------+--+------------+---+------------+
-  |    |   | ColLab-0,1 |  | ColLab-1,1 |  | ColLab-2,1 |   |            |
+  |    |   |    Tvp     |  |    Tvp     |  |    Tvp     |   |            |
   |    +---+------------+  +------------+  +------------+---+            |
-  |    | Y |            |  |            |  |            |Row|  Guides    |
-  | Y  |Tic| Panel-0,1  |  | Panel-1,1  |  | Panel-2,1  |Lab|            |
-  | -  |0,1|            |  |            |  |            |2,1|            |
+  |    | L |            |  |            |  |            | R |  Guides    |
+  | Y  | v | Panel-0,1  |  | Panel-1,1  |  | Panel-2,1  | v |            |
+  | -  | p |            |  |            |  |            | p |            |
   | L  +---+------------+  +------------+  +------------+---+            |
   | a  |                                                    |            |
   | b  +---+------------+  +------------+  +------------+---+            |
-  | e  | Y |            |  |            |  |            |Row|            |
-  | l  |Tic| Panel-0,0  |  | Panel-1,0  |  | Panel-2,0  |Lab|            |
-  |    |0,0|            |  |            |  |            |2,0|            |
+  | e  | L |            |  |            |  |            | R |            |
+  | l  | v | Panel-0,0  |  | Panel-1,0  |  | Panel-2,0  | v |            |
+  |    | p |            |  |            |  |            | p |            |
   |    +---+------------+  +------------+  +------------+---+            |
-  |    |   |  XTic-0,0  |  |  XTic-1,0  |  |  XTic-2,0  |   |            |
+  |    |   |    Bvp     |  |    Bvp     |  |    Bvp     |   |            |
   +----+---+------------+--+------------+--+------------+---+------------+
   |    |                       X-Label                      |            |
   +----+----------------------------------------------------+------------+
@@ -984,14 +1089,13 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	sepy := vg.Millimeters(2) // TODO: make configurabel
 	nrows := len(plot.Panels)
 	ncols := len(plot.Panels[0])
-	fmt.Printf("Layouting nrows=%d ncols=%d\n", nrows, ncols)
 	tw := width - ylabelw - guidesw - yticsw - rowlabw
 	th := height - titleh - xlabelh - collabh - xticsh
 	pwidth := (tw - sepx*vg.Length(ncols-1)) / vg.Length(ncols)
 	pheight := (th - sepy*vg.Length(nrows-1)) / vg.Length(nrows)
-	fmt.Printf("Layouting panel dim %.2f %.2f\n", pwidth, pheight)
 	x0, y0 := ylabelw+yticsw, xlabelh+xticsh
-	// Viewports for the panels themself
+
+	// Viewports for the panels themself.
 	for r := 0; r < nrows; r++ {
 		for c := 0; c < ncols; c++ {
 			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
@@ -1005,7 +1109,8 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 			}
 		}
 	}
-	// Viewports for y-tics and row-strips
+
+	// Viewports for y-tics and row-strips.
 	for r := 0; r < nrows; r++ {
 		y := y0 + vg.Length(r)*(pheight+sepy)
 		plot.Panels[r][0].Lvp = Viewport{
@@ -1019,7 +1124,8 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 			Width: rowlabw, Height: pheight,
 		}
 	}
-	// Viewports for x-tics and col-strips
+
+	// Viewports for x-tics and col-strips.
 	for c := 0; c < ncols; c++ {
 		x := x0 + vg.Length(c)*(pwidth+sepx)
 		plot.Panels[0][c].Bvp = Viewport{
@@ -1071,68 +1177,6 @@ func (plot *Plot) ticsExtents() (ywidth, xheight vg.Length) {
 	xheight += length + sep
 
 	return ywidth, xheight
-}
-
-// -------------------------------------------------------------------------
-// Step 8: Render remaining parts of plot
-
-func (plot *Plot) RenderVisuals() {
-	// Title, X-Label and Y-Label.
-	if plot.Title != "" {
-		style := MergeStyles(plot.Theme.Title, DefaultTheme.Title)
-		size := String2Float(style["size"], 0, 100)
-		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-			text: plot.Title, size: size}
-		plot.Grobs["Title"] = g
-	}
-	if name := plot.Scales["x"].Name; name != "" {
-		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
-		size := String2Float(style["size"], 0, 100)
-		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-			text: name, size: size}
-		plot.Grobs["X-Label"] = g
-	}
-	if name := plot.Scales["y"].Name; name != "" {
-		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
-		size := String2Float(style["size"], 0, 100)
-		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: name,
-			angle: math.Pi / 2, size: size}
-		plot.Grobs["Y-Label"] = g
-	}
-
-	// Strips for facetted plots.
-	strip := MergeStyles(plot.Theme.Strip, DefaultTheme.Strip)
-	stripBG := String2Color(strip["fill"])
-	stripCol := String2Color(strip["color"])
-	stripSize := String2Float(strip["size"], 4, 100)
-	if len(plot.Faceting.RowStrips) > 0 {
-		ncols := len(plot.Panels[0])
-		for r := range plot.Panels {
-			strip := plot.Faceting.RowStrips[r]
-			// TDOO: Add border.
-			plot.Panels[r][ncols-1].Rgr = []Grob{
-				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
-					fill: stripBG},
-				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-					text: strip, angle: math.Pi / 2,
-					size: stripSize, color: stripCol},
-			}
-		}
-	}
-	if len(plot.Faceting.ColStrips) > 0 {
-		nrows := len(plot.Panels)
-		for c := range plot.Panels[0] {
-			strip := plot.Faceting.ColStrips[c]
-			// TDOO: Add border.
-			plot.Panels[nrows-1][c].Tgr = []Grob{
-				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
-					fill: stripBG},
-				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-					text: strip, angle: 0,
-					size: stripSize, color: stripCol},
-			}
-		}
-	}
 }
 
 // Draw the whole content of this panel to vp.
