@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"image/color"
 	"os"
-	"reflect"
 	"testing"
 )
 
-func same(a1, a2 interface{}) bool {
-	return reflect.DeepEqual(a1, a2)
+func same(s []string, t []string) bool {
+	ss := NewStringSetFrom(s)
+	return ss.Equals(t)
 }
 
 func TestStatBin(t *testing.T) {
