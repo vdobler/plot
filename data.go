@@ -260,9 +260,13 @@ func NewDataFrame(name string, pool *StringPool) *DataFrame {
 	}
 }
 
-// NewDataFrameFrom construct a data frame from data. All fields wich can be
-// used in plot are set up.
+// NewDataFrameFrom construct a data frame from data. If data is already a
+// *DataFrame a copy will be returned.
 func NewDataFrameFrom(data interface{}, pool *StringPool) (*DataFrame, error) {
+	if df, ok := data.(*DataFrame); ok {
+		return df.Copy(), nil
+	}
+
 	t := reflect.TypeOf(data)
 	switch t.Kind() {
 	case reflect.Slice:
