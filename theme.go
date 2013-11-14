@@ -1,5 +1,6 @@
 package plot
 
+// Theme contains the stylable parameters of a plot.
 type Theme struct {
 	PointStyle, LineStyle, BarStyle AesMapping
 	TextStyle, RectStyle            AesMapping
@@ -64,15 +65,15 @@ var DefaultTheme = Theme{
 	},
 	Tic: AesMapping{
 		"linetype": "solid",
-		"color":    "black",
+		"color":    "gray40",
 		"size":     "2",
 		"length":   "2 mm",
 		"alpha":    "1",
 	},
 	TicLabel: AesMapping{
-		"color": "black",
+		"color": "gray20",
 		"size":  "12 pt",
-		"alpha": "0°",
+		"angle": "0",
 		"sep":   "0.5 mm",
 	},
 	Strip: AesMapping{

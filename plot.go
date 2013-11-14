@@ -1126,10 +1126,6 @@ func (plot *Plot) RenderVisuals() {
 	}
 }
 
-const (
-	majorTicMM = 2
-)
-
 // Draw the whole content of this panel to vp.
 // show{X,Y} are used to control display of X and Y scale.
 func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
@@ -1165,43 +1161,51 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 	if showY {
 		fmt.Printf("\nY-Scale for panel %q:\n%s\n", panel.Name, sy.String())
 	}
+
 	major := MergeStyles(panel.Plot.Theme.GridMajor, DefaultTheme.GridMajor)
+	majorLT := String2LineType(major["linetype"])
+	majorSize := String2Float(major["size"], 0, 20)
+	majorCol := String2Color(major["color"])
+
+	tic := MergeStyles(panel.Plot.Theme.Tic, DefaultTheme.Tic)
+	ticLT := String2LineType(tic["linetype"])
+	ticCol := String2Color(tic["color"])
+	ticLen := vg.Length(String2Float(tic["length"], 0, 1000))
+	ticSize := String2Float(tic["size"], 0, 100)
+
+	label := MergeStyles(panel.Plot.Theme.TicLabel, DefaultTheme.TicLabel)
+	labelAngle := String2Float(label["angle"], 0, 2*math.Pi)
+	labelCol := String2Color(label["color"])
+	labelSep := vg.Length(String2Float(label["sep"], 0, 1000))
+	labelSize := String2Float(label["size"], 0, 100)
+
 	// TODO minor := MergeStyles(panel.Plot.Theme.GridMinor, DefaultTheme.GridMinor)
 	for i, x := range sx.Breaks {
 		xv := sx.Pos(x)
 		GrobLine{x0: xv, y0: 0, x1: xv, y1: 1,
-			linetype: String2LineType(major["linetype"]),
-			size:     String2Float(major["size"], 0, 20),
-			color:    String2Color(major["color"])}.Draw(vp)
+			linetype: majorLT, size: majorSize, color: majorCol}.Draw(vp)
 		if !showX {
 			continue
 		}
-		h := vp.YI(vg.Millimeters(majorTicMM))
+		h, sep := vp.YI(vg.Length(ticLen)), vp.YI(labelSep)
 		GrobLine{x0: xv, y0: 0, x1: xv, y1: -h,
-			linetype: SolidLine,
-			size:     1,
-			color:    BuiltinColors["gray"]}.Draw(vp)
-		GrobText{x: xv, y: -h, hjust: 0.5, vjust: 1, text: sx.Labels[i],
-			size:  12,
-			color: BuiltinColors["gray20"]}.Draw(vp)
+			linetype: ticLT, size: ticSize, color: ticCol}.Draw(vp)
+		GrobText{x: xv, y: -h - sep, hjust: 0.5, vjust: 1,
+			text: sx.Labels[i], size: labelSize, angle: labelAngle,
+			color: labelCol}.Draw(vp)
 	}
 	for i, y := range sy.Breaks {
 		yv := sy.Pos(y)
 		GrobLine{x0: 0, y0: yv, x1: 1, y1: yv,
-			linetype: String2LineType(major["linetype"]),
-			size:     String2Float(major["size"], 0, 20),
-			color:    String2Color(major["color"])}.Draw(vp)
+			linetype: majorLT, size: majorSize, color: majorCol}.Draw(vp)
 		if !showY {
 			continue
 		}
-		w := vp.XI(vg.Millimeters(majorTicMM))
+		w, sep := vp.XI(vg.Length(ticLen)), vp.XI(labelSep)
 		GrobLine{x0: 0, y0: yv, x1: -w, y1: yv,
-			linetype: SolidLine,
-			size:     1,
-			color:    BuiltinColors["gray"]}.Draw(vp)
-		GrobText{x: -w, y: yv, hjust: 1, vjust: 0.5, text: sy.Labels[i],
-			size:  12,
-			color: BuiltinColors["gray20"]}.Draw(vp)
+			linetype: ticLT, size: ticSize, color: ticCol}.Draw(vp)
+		GrobText{x: -w - sep, y: yv, hjust: 1, vjust: 0.5, text: sy.Labels[i],
+			size: labelSize, color: labelCol}.Draw(vp)
 	}
 
 	// Draw the layers.
