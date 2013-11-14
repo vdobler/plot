@@ -976,8 +976,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	// Col- and Row-Labels, X- and Y-Tics
 	var xticsh, yticsw vg.Length
 	var collabh, rowlabw vg.Length
-	yticsw = plot.yTicsWidth()
-	xticsh = vg.Millimeters(10)  // TODO
+	yticsw, xticsh = plot.ticsExtents()
 	collabh = vg.Millimeters(10) // TODO
 	rowlabw = vg.Millimeters(10) // TODO
 
@@ -1037,31 +1036,41 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 
 }
 
-// yTicsWidth computes the width needed to display the y tics.
-func (plot *Plot) yTicsWidth() vg.Length {
-	// Look for longest label.
-	var max vg.Length
-	style := MergeStyles(plot.Theme.TicLabel, DefaultTheme.TicLabel)
-	size := String2Float(style["size"], 4, 36)
-	angle := String2Float(style["angle"], 0, 2*math.Pi)
+// ticsExtents computes the width of the y-tics and the height of the x-tics
+// needed to display the tics.
+func (plot *Plot) ticsExtents() (ywidth, xheight vg.Length) {
+	label := MergeStyles(plot.Theme.TicLabel, DefaultTheme.TicLabel)
+	size := String2Float(label["size"], 4, 36)
+	angle := String2Float(label["angle"], 0, 2*math.Pi) // TODO: Should be different for x and y.
+	sep := vg.Length(String2Float(label["sep"], 0, 100))
+	tic := MergeStyles(plot.Theme.Tic, DefaultTheme.Tic)
+	length := vg.Length(String2Float(tic["length"], 0, 100))
+
+	// Look for longest y label.
 	for r := range plot.Panels {
 		sy := plot.Panels[r][0].Scales["y"]
 		for _, label := range sy.Labels {
-			w, h := GrobText{text: label, size: size, angle: angle}.BoundingBox()
-			fmt.Printf("BB of %q at %.1f: %.1f x %.1f mm²\n", label, size,
-				w.Millimeters(), h.Millimeters())
-			if w > max {
-				max = w
+			w, _ := GrobText{text: label, size: size, angle: angle}.BoundingBox()
+			if w > ywidth {
+				ywidth = w
 			}
 		}
 	}
+	ywidth += length + sep
 
-	// Add length of tic and distance.
-	tic := MergeStyles(plot.Theme.Tic, DefaultTheme.Tic)
-	max += vg.Length(String2Float(tic["length"], 0, 1000))
-	max += vg.Length(String2Float(style["sep"], 0, 1000))
+	// Look for highest x label.
+	for c := range plot.Panels[0] {
+		sx := plot.Panels[0][c].Scales["x"]
+		for _, label := range sx.Labels {
+			_, h := GrobText{text: label, size: size, angle: angle}.BoundingBox()
+			if h > xheight {
+				xheight = h
+			}
+		}
+	}
+	xheight += length + sep
 
-	return max
+	return ywidth, xheight
 }
 
 // -------------------------------------------------------------------------
