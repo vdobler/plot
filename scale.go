@@ -51,9 +51,9 @@ type Scale struct {
 	DomainLevels FloatSet
 
 	// The actual min and max (continuous scales) or levels (discrete)
-	// used for this scale.
+	// used for this scale.  All finalized scales are continous so
+	// there is no Levels field.
 	Min, Max float64
-	Levels   FloatSet
 
 	// All following fields are set in Prepare.
 	// These functions map the domain space to the aesthetics space.
@@ -98,7 +98,7 @@ func (s *Scale) String() string {
 	t := fmt.Sprintf("Scale %q %p named %q: ", s.Aesthetic, s, s.Name)
 	if s.Discrete {
 		t += "discrete\n    Domain:    "
-		t += s.FixLevels.String()
+		t += s.DomainLevels.String()
 	} else {
 		if s.Time {
 			t += "time\n    Domain:    "
@@ -137,6 +137,7 @@ func (s *Scale) String() string {
 	return t
 }
 
+
 // -------------------------------------------------------------------------
 // Training
 
@@ -144,8 +145,12 @@ func (s *Scale) String() string {
 func (s *Scale) Train(f Field) {
 	if f.Discrete() {
 		s.DomainLevels.Join(f.Levels())
-		s.Min = 0
-		s.Max = float64(len(s.DomainLevels) - 1)
+		if s.Min >= 1 {
+			s.Min = 1
+		}
+		if m := float64(len(s.DomainLevels)); s.Max <= m {
+			s.Max = m
+		}
 	} else {
 		// Continous data.
 		min, max, mini, maxi := f.MinMax()
@@ -213,10 +218,10 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 	s.Max += expand
 	fullRange := s.Max - s.Min
 
-	// Breaks are put on integer values [0,n-1].
+	// Breaks are put on integer values [1,n].
 	s.Breaks = make([]float64, n)
 	for i := range s.Breaks {
-		s.Breaks[i] = float64(i)
+		s.Breaks[i] = float64(i+1)
 	}
 
 	// Ordering and labels of the discrete levels.
@@ -239,22 +244,8 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 
 	// Produce mapping functions
 	s.Pos = func(x float64) float64 {
-		// Find x in levels
-		i := -1
-		for j, v := range levels {
-			if v == x {
-				i = j
-				break
-			}
-		}
-		if i == -1 {
-			fmt.Printf("Strange %f not found in levels of scale %s %p",
-				s.Aesthetic, s)
-			return math.NaN()
-		}
-
 		// Scale to [0,1]
-		return (float64(i) - s.Min) / fullRange
+		return (x - s.Min) / fullRange
 	}
 	s.Color = func(x float64) color.Color {
 		c := s.Pos(x)
@@ -276,7 +267,6 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 		c *= float64(StarPoint) // TODO same as below
 		return int(c)
 	}
-
 }
 
 // FinalizeContinous sets up the fields Breaks, Labels and the

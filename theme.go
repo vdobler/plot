@@ -39,8 +39,8 @@ var DefaultTheme = Theme{
 		"angle":      "0",
 	},
 	RectStyle: AesMapping{
-		"linetype": "blank",
-		"color":    "#00000000",
+		"linetype": "solid",
+		"color":    "gray50",
 		"fill":     "gray50",
 		"alpha":    "1",
 	},

@@ -93,7 +93,7 @@ Plot Creation is the following process:
       as a specific Geom.
 
 
-  5.  Geom construction
+  5.  Geom constructio TODO: no longer accurate
       ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
   5a. Apply geom specific position adjustments.
 
@@ -234,6 +234,33 @@ Conclusion: Original ggplot2 for R solution is not practical here.
 Solution: Make position adjustment a property of the individial
 geoms. Some geoms might not allow and position adjustments at all
 or just a subset.
+
+
+Discrete Position Scales
+------------------------
+Discrete position scales provide a major obstacle in geom construction:
+Assume a discrete string variable stored like this
+  "foo"  3.0
+  "bar"  4.0
+  "waz"  7.0
+and try to construct a boxplot (or bars) with this string variable
+mapped to x-scale. How to set up, compute, transmit and draw the
+with of the boxes, especially with a dodging position adjustment?
+The idea for discrete x-scale is the following:
+  a) During geom construction the width is set to 0.9 (maybe stylable).
+  b) The x coordinates of the geoms are replaced by logical x-coords,
+     thus foo-->1, bar-->2, waz-->3
+  c) Position adjustments (especially dodge) is applied to this logical
+     x-coords.
+     Thus after geom construction the fundamental geom are always in
+     continuous coordinates!
+  d) The scale is converted to a continuous scale. BAD IDEA.
+  e) Rendering of the geoms happens on a continuous scale.
+
+Other idea:
+  - Nothing is really changed during geom construction or rendering.
+  - Geom construction produces continuous fields in the data frames
+  - When these continuous fields are drawn the following
 
 
 Geoms

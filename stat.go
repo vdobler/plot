@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 )
 
 var _ = os.Open
@@ -407,3 +408,116 @@ func (s StatFunction) Apply(data *DataFrame, panel *Panel) *DataFrame {
 	return result
 
 }
+
+// -------------------------------------------------------------------------
+// StatBoxplot
+
+type StatBoxplot struct {
+}
+
+var _ Stat = StatBoxplot{}
+
+func (StatBoxplot) Name() string { return "StatBoxplot" }
+
+func (StatBoxplot) Info() StatInfo {
+	return StatInfo{
+		NeededAes:          []string{"x", "y"},
+		OptionalAes:        []string{},
+		ExtraFieldHandling: GroupOnExtraFields,
+	}
+}
+
+type boxplot struct {
+	min, low, q1, med, q3, high, max float64
+	outliers []float64
+}
+
+// TODO: handle extreme cases
+func computeBoxplot(d []float64) (b boxplot) {
+	n := len(d)
+	sort.Float64s(d)
+
+	// Compute the five boxplot values.
+	b.min, b.max = d[0], d[n-1]
+	if n%2 == 1 {
+		b.med = d[(n-1)/2]
+	} else {
+		b.med = (d[n/2] + d[n/2-1])/2
+	}
+	b.q1, b.q3 = d[n/4], d[3*n/4]
+
+	iqr := b.q3 - b.q1
+	lo, hi := b.q1 - 1.5*iqr, b.q3 + 1.5*iqr
+	b.low, b.high = b.max, b.min
+
+	// Compute low, high and outliers.
+	for _, y := range d {
+		if y>=lo && y < b.low {
+			b.low = y
+		}
+		if y<=hi && y > b.high {
+			b.high = y
+		}
+		if y < lo || y>hi {
+			b.outliers = append(b.outliers, y)
+		}
+	}
+
+	return b
+}
+
+func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
+	if data == nil || data.N == 0 {
+		return nil
+	}
+	xd, yd := data.Columns["x"].Data, data.Columns["y"].Data
+
+	xs := Levels(data, "x").Elements()
+	sort.Float64s(xs)
+	n := len(xs)
+	fmt.Printf("StatBoxplot of %d values %v\n", n, xs)
+	ys := make(map[float64][]float64)
+
+	pool := data.Pool
+	xf := NewField(n, data.Columns["x"].Type, pool)
+	medf := NewField(n, Float, pool)
+	minf, maxf := NewField(n, Float, pool), NewField(n, Float, pool)
+	lowf, highf := NewField(n, Float, pool), NewField(n, Float, pool)
+	q1f, q3f := NewField(n, Float, pool), NewField(n, Float, pool)
+
+	for i := 0; i<data.N; i++ {
+		x, y := xd[i], yd[i]
+		ys[x] = append(ys[x], y)
+	}
+	i := 0
+	for x, y := range ys {
+		b := computeBoxplot(y)
+		xf.Data[i] = x
+		minf.Data[i] = b.min
+		lowf.Data[i] = b.low
+		q1f.Data[i] = b.q1
+		medf.Data[i] = b.med
+		q3f.Data[i] = b.q3
+		highf.Data[i] = b.high
+		maxf.Data[i] = b.max
+		i++
+		fmt.Printf("x=%.1f  %d samples, median=%.1f\n", x, len(y), b.med)
+	}
+
+	result := NewDataFrame(fmt.Sprintf("boxplot of %s", data.Name), pool)
+	result.N = n
+	result.Columns["x"] = xf
+	result.Columns["min"] = minf
+	result.Columns["low"] = lowf
+	result.Columns["q1"] = q1f
+	result.Columns["mid"] = medf
+	result.Columns["q3"] = q3f
+	result.Columns["high"] = highf
+	result.Columns["max"] = maxf
+
+	fmt.Printf("Result of StatBoxplot:\n")
+	result.Print(os.Stdout)
+	return result
+
+}
+

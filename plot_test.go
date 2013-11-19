@@ -385,5 +385,12 @@ func TestDiscreteXScale(t *testing.T) {
 	}
 	plot.Layers = append(plot.Layers, &rawData)
 
+	box := Layer{
+		Name: "Boxplot",
+		Stat: StatBoxplot{},
+		Geom: GeomBoxplot{},
+	}
+	plot.Layers = append(plot.Layers, &box)
+
 	plot.WritePNG("discrx.png", 800, 600)
 }

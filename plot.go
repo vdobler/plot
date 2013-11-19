@@ -766,10 +766,16 @@ func (p *Panel) RenderGeoms() {
 		if len(layer.Fundamentals) == 0 {
 			continue
 		}
-		for _, fund := range layer.Fundamentals {
+		for fi, fund := range layer.Fundamentals {
 			data := fund.Data
 			aes := fund.Geom.Aes(p.Plot)
-			layer.Grobs = append(layer.Grobs, fund.Geom.Render(p, data, aes)...)
+			grobs := fund.Geom.Render(p, data, aes)
+			fmt.Printf("RenderGeom on layer %s: %d %s --> %d grobs\n",
+				layer.Name, fi, fund.Geom.Name(), len(grobs))
+			for j,g := range grobs {
+				fmt.Printf("  %d: %s\n", j, g.String())
+			}
+			layer.Grobs = append(layer.Grobs, grobs...)
 		}
 	}
 }
@@ -1260,7 +1266,8 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 
 	// Draw the layers.
 	for _, layer := range panel.Layers {
-		for _, g := range layer.Grobs {
+		for gi, g := range layer.Grobs {
+			fmt.Printf("Drawing on layer %s: %d %s\n", layer.Name, gi, g.String())
 			g.Draw(vp)
 		}
 	}
