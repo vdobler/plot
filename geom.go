@@ -570,6 +570,7 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	low, high := data.Columns["low"].Data, data.Columns["high"].Data
 	q1, q3 := data.Columns["q1"].Data, data.Columns["q3"].Data
 	x, mid := data.Columns["x"].Data, data.Columns["mid"].Data
+	outf := data.Columns["outliers"]
 
 	// xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
@@ -591,6 +592,10 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	yy := NewField(6*data.N, Float, data.Pool)
 	gg := NewField(6*data.N, Int, data.Pool)
 
+	outliers := NewDataFrame("Outliers of Boxplot of "+data.Name, data.Pool)
+	ox := NewField(0, Float, data.Pool)
+	oy := NewField(0, Float, data.Pool)
+
 	for i := 0; i < data.N; i++ {
 		i = int(i)
 		fmt.Printf("Working on box %d at x=%.1f\n", i, x[i])
@@ -610,10 +615,15 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 		xx.Data[6*i+4], xx.Data[6*i+5] = xc-wh, xc+wh
 		yy.Data[6*i+4], yy.Data[6*i+5] = mid[i], mid[i]
 
-		group := float64(3 * i) // ???
+		group := float64(3 * i)
 		gg.Data[6*i], gg.Data[6*i+1] = group, group
 		gg.Data[6*i+2], gg.Data[6*i+3] = group+1, group+1
 		gg.Data[6*i+4], gg.Data[6*i+5] = group+2, group+2
+
+		for _, outy := range outf.Vec(i) {
+			ox.Data = append(ox.Data, xc)
+			oy.Data = append(oy.Data, outy)
+		}
 	}
 
 	rects.Columns["xmin"] = xmin
@@ -625,10 +635,16 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	lines.Columns["y"] = yy
 	lines.Columns["group"] = gg
 
+	outliers.Columns["x"] = ox
+	outliers.Columns["y"] = oy
+	outliers.N = len(ox.Data)
+
 	trainScales(panel, rects, "x:xmin,xmax")
 	trainScales(panel, lines, "y:yy") // Bug: should train on real ymin/max
 
-	// TODO: outliers
+	outlierStyle := b.Style.Copy()
+	outlierStyle["color"] = "#aa0000"
+	outlierStyle["shape"] = "star"
 
 	return []Fundamental{
 		Fundamental{
@@ -642,6 +658,12 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 				Style: b.Style.Copy(),
 			},
 			Data: lines,
+		},
+		Fundamental{
+			Geom: GeomPoint{
+				Style: outlierStyle,
+			},
+			Data: outliers,
 		},
 	}
 }

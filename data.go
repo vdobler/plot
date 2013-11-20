@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 )
@@ -131,6 +132,12 @@ func (f Field) String(x float64) string {
 			return f.Pool.pool[i]
 		}
 		return "--NA--"
+	case Vector:
+		i := int(x)
+		if i >= len(f.Data) {
+			return "[]"
+		}
+		return fmt.Sprintf("[%.1f...]", f.Data[i])
 	}
 	panic("Oooops")
 }
@@ -162,6 +169,43 @@ func (f Field) AsTime() []time.Time {
 		ret[i] = f.Time(x)
 	}
 	return ret
+}
+
+// -------------------------------------------------------------------------
+// Fields of Vcctor type.
+
+// f.Data[0] contains how many vectors N are stored in f
+// f.Data[i] for 0<=i<N contain the start of vector i
+//
+
+func (f Field) Vec(i int) []float64 {
+	a := int(f.Data[i])
+	var e int
+	if i+1 < int(f.Data[0]) {
+		e = int(f.Data[i+1])
+	} else {
+		e = len(f.Data)
+	}
+	return f.Data[a:e]
+}
+
+// AddVec will set the i'th entry in f to v with f having n logical elements.
+// The entries must be filled in strict order.
+func (f Field) AddVec(v []float64) Field {
+	if len(f.Data) == 0 {
+		f.Data = append([]float64{1}, v...)
+	} else {
+		m, k := len(f.Data), int(f.Data[0])
+		d := make([]float64, k+1)
+		for i := 0; i < k; i++ {
+			d[i] = f.Data[i] + 1
+		}
+		d[k] = float64(m + 1)
+		d = append(d, f.Data[k:]...)
+		d = append(d, v...)
+		f.Data = d
+	}
+	return f
 }
 
 // -------------------------------------------------------------------------
@@ -560,7 +604,19 @@ func (df *DataFrame) Print(out io.Writer) {
 		fmt.Fprintf(w, "%d", i)
 		for _, name := range names {
 			field := df.Columns[name]
-			fmt.Fprintf(w, "\t%s", field.String(field.Data[i]))
+			var s string
+			if field.Type == Vector {
+				v := field.Vec(i)
+				sv := make([]string, len(v))
+				for j, t := range v {
+					sv[j] = fmt.Sprintf("%.1f", t)
+				}
+				s = strings.Join(sv, ",")
+				s = fmt.Sprintf("[%s]", s)
+			} else {
+				s = field.String(field.Data[i])
+			}
+			fmt.Fprintf(w, "\t%s", s)
 		}
 		fmt.Fprintln(w)
 	}

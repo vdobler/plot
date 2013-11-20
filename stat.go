@@ -428,13 +428,16 @@ func (StatBoxplot) Info() StatInfo {
 }
 
 type boxplot struct {
-	min, low, q1, med, q3, high, max float64
-	outliers                         []float64
+	n                      int
+	min, max               float64
+	low, q1, med, q3, high float64
+	outliers               []float64
 }
 
-// TODO: handle extreme cases
+// TODO: handle corner cases
 func computeBoxplot(d []float64) (b boxplot) {
 	n := len(d)
+	b.n = n
 	sort.Float64s(d)
 
 	// Compute the five boxplot values.
@@ -480,10 +483,11 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 
 	pool := data.Pool
 	xf := NewField(n, data.Columns["x"].Type, pool)
-	medf := NewField(n, Float, pool)
+	numf, medf := NewField(n, Int, pool), NewField(n, Float, pool)
 	minf, maxf := NewField(n, Float, pool), NewField(n, Float, pool)
 	lowf, highf := NewField(n, Float, pool), NewField(n, Float, pool)
 	q1f, q3f := NewField(n, Float, pool), NewField(n, Float, pool)
+	outf := NewField(0, Vector, pool)
 
 	for i := 0; i < data.N; i++ {
 		x, y := xd[i], yd[i]
@@ -493,6 +497,7 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	for x, y := range ys {
 		b := computeBoxplot(y)
 		xf.Data[i] = x
+		numf.Data[i] = float64(b.n)
 		minf.Data[i] = b.min
 		lowf.Data[i] = b.low
 		q1f.Data[i] = b.q1
@@ -500,13 +505,14 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 		q3f.Data[i] = b.q3
 		highf.Data[i] = b.high
 		maxf.Data[i] = b.max
+		outf = outf.AddVec(b.outliers)
 		i++
-		fmt.Printf("x=%.1f  %d samples, median=%.1f\n", x, len(y), b.med)
 	}
 
 	result := NewDataFrame(fmt.Sprintf("boxplot of %s", data.Name), pool)
 	result.N = n
 	result.Columns["x"] = xf
+	result.Columns["count"] = numf
 	result.Columns["min"] = minf
 	result.Columns["low"] = lowf
 	result.Columns["q1"] = q1f
@@ -514,9 +520,8 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	result.Columns["q3"] = q3f
 	result.Columns["high"] = highf
 	result.Columns["max"] = maxf
+	result.Columns["outliers"] = outf
 
-	fmt.Printf("Result of StatBoxplot:\n")
-	result.Print(os.Stdout)
 	return result
 
 }
