@@ -137,23 +137,31 @@ func (s *Scale) String() string {
 	return t
 }
 
-
 // -------------------------------------------------------------------------
 // Training
 
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
+	fmt.Printf("Training Scale %s/%s with %d %s\n",
+		s.Name, s.Aesthetic, len(f.Data), f.Type.String())
 	if f.Discrete() {
 		s.DomainLevels.Join(f.Levels())
-		if s.Min >= 1 {
-			s.Min = 1
+		levels := s.DomainLevels.Elements()
+		if n := len(levels); n > 0 {
+			if levels[0] < s.DomainMin {
+				s.DomainMin = levels[0]
+			}
+			if levels[n-1] > s.DomainMax {
+				s.DomainMax = levels[n-1]
+			}
 		}
-		if m := float64(len(s.DomainLevels)); s.Max <= m {
-			s.Max = m
-		}
+		fmt.Printf("  data is discrete and has %d levels\n", len(f.Levels()))
 	} else {
 		// Continous data.
+		// TODO: this might train a discrete scale...
 		min, max, mini, maxi := f.MinMax()
+		fmt.Printf("  data is continuous from %.2f to %.2f\n",
+			min, max)
 		if mini != -1 {
 			if min < s.DomainMin {
 				s.DomainMin = min
@@ -165,6 +173,8 @@ func (s *Scale) Train(f Field) {
 			}
 		}
 	}
+	fmt.Printf("  --> Domain [%.2f,%.2f] , %d levels\n",
+		s.DomainMin, s.DomainMax, len(s.DomainLevels))
 }
 
 func (s *Scale) TrainByValue(xs ...float64) {
@@ -203,12 +213,39 @@ func (s *Scale) Finalize(pool *StringPool) {
 	s.Finalized = true
 }
 
+// Convert the discrete x value with possible adjustemnts in (-0.5,+0.5)
+// to a continous value by looking up xi....   Arghh...
+func discreteToCont(x float64, levels []float64) float64 {
+	xi := math.Floor(x + 0.5)
+	dx := x - xi
+	i := -1
+	for j, v := range levels {
+		if v == xi {
+			i = j
+			break
+		}
+	}
+	w := float64(i+1) + dx
+	return w
+}
+
 // FinalizeDiscrete
 func (s *Scale) FinalizeDiscrete(pool *StringPool) {
-	fmt.Printf("Finalizing discrete scale %q %p\n", s.Name, s)
+	fmt.Printf("Finalizing discrete scale %q %p\n%+v\n", s.Name, s, *s)
 	// TODO: Manual setting the values.
 
+	// Position the n levels on 1, 2, ..., n but consider the
+	// posibility that the geom might be broad and require extra space.
 	n := len(s.DomainLevels)
+	levels := s.DomainLevels.Elements()
+	s.Min, s.Max = 1, float64(n)
+	// This works only because the levels are sorted.
+	if x := discreteToCont(s.DomainMin, levels); x < s.Min {
+		s.Min = x
+	}
+	if x := discreteToCont(s.DomainMax, levels); x > s.Max {
+		s.Max = x
+	}
 
 	expand := (s.Max-s.Min)*s.ExpandRel + s.ExpandAbs
 	if expand < 0.1 {
@@ -221,13 +258,16 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 	// Breaks are put on integer values [1,n].
 	s.Breaks = make([]float64, n)
 	for i := range s.Breaks {
-		s.Breaks[i] = float64(i+1)
+		s.Breaks[i] = float64(i + 1)
 	}
 
 	// Ordering and labels of the discrete levels.
-	levels := s.DomainLevels.Elements()
-	sort.Float64s(levels)
+	s.Breaks = make([]float64, n)
 	s.Labels = make([]string, n)
+	sort.Float64s(levels)
+	for i := range s.Breaks {
+		s.Breaks[i] = levels[i]
+	}
 	switch s.DomainType {
 	case String:
 		for i := range s.Labels {
@@ -244,8 +284,22 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 
 	// Produce mapping functions
 	s.Pos = func(x float64) float64 {
+		xi := math.Floor(x + 0.5)
+		dx := x - xi
+		i := -1
+		for j, v := range levels {
+			if v == xi {
+				i = j
+				break
+			}
+		}
+		w := float64(i+1) + dx
 		// Scale to [0,1]
-		return (x - s.Min) / fullRange
+		z := (w - s.Min) / fullRange
+		fmt.Printf("s.Pos(%.2f) xi=%.0f dx=%.2f i=%d w=%.1f --> %.2f  (s.Min=%.1f s.Max=%.1f)\n",
+			x, xi, dx, i, w, z, s.Min, s.Max)
+
+		return z
 	}
 	s.Color = func(x float64) color.Color {
 		c := s.Pos(x)

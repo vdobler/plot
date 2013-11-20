@@ -429,7 +429,7 @@ func (StatBoxplot) Info() StatInfo {
 
 type boxplot struct {
 	min, low, q1, med, q3, high, max float64
-	outliers []float64
+	outliers                         []float64
 }
 
 // TODO: handle extreme cases
@@ -442,23 +442,23 @@ func computeBoxplot(d []float64) (b boxplot) {
 	if n%2 == 1 {
 		b.med = d[(n-1)/2]
 	} else {
-		b.med = (d[n/2] + d[n/2-1])/2
+		b.med = (d[n/2] + d[n/2-1]) / 2
 	}
 	b.q1, b.q3 = d[n/4], d[3*n/4]
 
 	iqr := b.q3 - b.q1
-	lo, hi := b.q1 - 1.5*iqr, b.q3 + 1.5*iqr
+	lo, hi := b.q1-1.5*iqr, b.q3+1.5*iqr
 	b.low, b.high = b.max, b.min
 
 	// Compute low, high and outliers.
 	for _, y := range d {
-		if y>=lo && y < b.low {
+		if y >= lo && y < b.low {
 			b.low = y
 		}
-		if y<=hi && y > b.high {
+		if y <= hi && y > b.high {
 			b.high = y
 		}
-		if y < lo || y>hi {
+		if y < lo || y > hi {
 			b.outliers = append(b.outliers, y)
 		}
 	}
@@ -485,7 +485,7 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	lowf, highf := NewField(n, Float, pool), NewField(n, Float, pool)
 	q1f, q3f := NewField(n, Float, pool), NewField(n, Float, pool)
 
-	for i := 0; i<data.N; i++ {
+	for i := 0; i < data.N; i++ {
 		x, y := xd[i], yd[i]
 		ys[x] = append(ys[x], y)
 	}
@@ -520,4 +520,3 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	return result
 
 }
-

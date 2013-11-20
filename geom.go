@@ -2,9 +2,9 @@ package plot
 
 import (
 	"fmt"
-	"strings"
 	"os"
 	"sort"
+	"strings"
 )
 
 var _ = fmt.Printf
@@ -26,6 +26,13 @@ type Geom interface {
 	// Render interpretes data as the specific geom and produces Grobs.
 	// TODO: Grouping?
 	Render(p *Panel, data *DataFrame, aes AesMapping) []Grob
+}
+
+// TODO use one method returtning a GeomInfo instead of lots of methods.
+type GeomInfo struct {
+	Name     string   // Name of this Geom
+	Needed   []string // The needed slots to construct this geom.
+	Optional []string // The optional slots this geom understands.
 }
 
 // trainScales is a helper for geom construction: The some scales of p are
@@ -82,7 +89,6 @@ func (p GeomPoint) Aes(plot *Plot) AesMapping {
 }
 
 func (p GeomPoint) Construct(df *DataFrame, panel *Panel) []Fundamental {
-	df.Columns["x"] = makeContinuous(df.Columns["x"], panel.Scales["x"])
 	// TODO: Handle p.Position == Jitter
 	return []Fundamental{
 		Fundamental{
@@ -538,7 +544,7 @@ type GeomBoxplot struct {
 
 var _ Geom = GeomBoxplot{}
 
-func (b GeomBoxplot) Name() string          { return "GeomBoxplot" }
+func (b GeomBoxplot) Name() string { return "GeomBoxplot" }
 func (b GeomBoxplot) NeededSlots() []string {
 	return []string{"x", "min", "low", "mid", "high", "max"}
 }
@@ -566,7 +572,7 @@ func makeContinuous(f Field, s *Scale) Field {
 				break
 			}
 		}
-		return i+1
+		return i + 1
 	}
 
 	for i, v := range f.Data {
@@ -583,29 +589,27 @@ func makeContinuous(f Field, s *Scale) Field {
 func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	println("GeomBoxplot.Construct()")
 
-	x := makeContinuous(data.Columns["x"], panel.Scales["x"]).Data
-
 	// min, max := data.Columns["min"].Data, data.Columns["max"].Data
 	low, high := data.Columns["low"].Data, data.Columns["high"].Data
 	q1, q3 := data.Columns["q1"].Data, data.Columns["q3"].Data
-	mid := data.Columns["mid"].Data
+	x, mid := data.Columns["x"].Data, data.Columns["mid"].Data
 
 	// xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
 	with := 0.9 // TODO: determine from data
-	wh := with/2
+	wh := with / 2
 
 	// TODO: Dodging
 
-	rects := NewDataFrame("Rects of Boxplot of " + data.Name, data.Pool)
+	rects := NewDataFrame("Rects of Boxplot of "+data.Name, data.Pool)
 	rects.N = data.N
 	ymin := NewField(data.N, Float, data.Pool)
 	ymax := NewField(data.N, Float, data.Pool)
 	xmin := NewField(data.N, Float, data.Pool)
 	xmax := NewField(data.N, Float, data.Pool)
 
-	lines := NewDataFrame("Lines of Boxplot of " + data.Name, data.Pool)
-	lines.N = 6*data.N
+	lines := NewDataFrame("Lines of Boxplot of "+data.Name, data.Pool)
+	lines.N = 6 * data.N
 	xx := NewField(6*data.N, Float, data.Pool)
 	yy := NewField(6*data.N, Float, data.Pool)
 	gg := NewField(6*data.N, Int, data.Pool)
@@ -615,7 +619,7 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 		fmt.Printf("Working on box %d at x=%.1f\n", i, x[i])
 
 		xc := x[i]
-		xmin.Data[i], xmax.Data[i] = xc - wh, xc+wh
+		xmin.Data[i], xmax.Data[i] = xc-wh, xc+wh
 
 		y1, y3 := q1[i], q3[i]
 		ymin.Data[i], ymax.Data[i] = y1, y3
@@ -626,12 +630,12 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 		yy.Data[6*i], yy.Data[6*i+1] = yl, y1
 		yy.Data[6*i+2], yy.Data[6*i+3] = y3, yh
 
-		xx.Data[6*i+4], xx.Data[6*i+5] = xc -wh, xc+wh
+		xx.Data[6*i+4], xx.Data[6*i+5] = xc-wh, xc+wh
 		yy.Data[6*i+4], yy.Data[6*i+5] = mid[i], mid[i]
 
-		group := float64(i/6) // ???
-		gg.Data[6*i], gg.Data[6*i+1] , gg.Data[6*i+2] = group, group, group
-		gg.Data[6*i+3], gg.Data[6*i+4] , gg.Data[6*i+5] = group, group, group
+		group := float64(i / 6) // ???
+		gg.Data[6*i], gg.Data[6*i+1], gg.Data[6*i+2] = group, group, group
+		gg.Data[6*i+3], gg.Data[6*i+4], gg.Data[6*i+5] = group, group, group
 	}
 
 	rects.Columns["xmin"] = xmin
@@ -650,7 +654,6 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	lines.Print(os.Stdout)
 	fmt.Println("rects:")
 	rects.Print(os.Stdout)
-
 
 	// TODO: outliers
 
@@ -675,78 +678,78 @@ func (b GeomBoxplot) Render(panel *Panel, data *DataFrame, style AesMapping) []G
 	panic("Should not be called...")
 
 	/*
-	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
+		xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
-	colFunc := makeColorFunc("color", data, panel, style)
-	fillFunc := makeColorFunc("fill", data, panel, style)
-	linetypeFunc := makeStyleFunc("linetype", data, panel, style)
-	alphaFunc := makePosFunc("alpha", data, panel, style)
-	sizeFunc := makePosFunc("size", data, panel, style)
+		colFunc := makeColorFunc("color", data, panel, style)
+		fillFunc := makeColorFunc("fill", data, panel, style)
+		linetypeFunc := makeStyleFunc("linetype", data, panel, style)
+		alphaFunc := makePosFunc("alpha", data, panel, style)
+		sizeFunc := makePosFunc("size", data, panel, style)
 
-	grobs := make([]Grob, 0)
-	var i int
-	for i = 0; i < data.N; i++ {
-		fmt.Printf("Working on box %d at x=%.1f\n",
-			i, x[i])
-		alpha := alphaFunc(i)
-		if alpha == 0 {
-			// continue // Won't be visibale anyway....
+		grobs := make([]Grob, 0)
+		var i int
+		for i = 0; i < data.N; i++ {
+			fmt.Printf("Working on box %d at x=%.1f\n",
+				i, x[i])
+			alpha := alphaFunc(i)
+			if alpha == 0 {
+				// continue // Won't be visibale anyway....
+			}
+
+			// Coordinates of diagonal corners.
+			xc := xf(x[i])
+			x0 := xf(x[2]-wh)
+			y0 := yf(q1[i])
+			x1, y1 := xf(x[i]+wh), yf(q3[i])
+			// TODO: swap if wrong order
+
+			// The box.
+			lt := LineType(linetypeFunc(i))
+			rect := GrobRect{
+				xmin: x0,
+				ymin: y0,
+				xmax: x1,
+				ymax: y1,
+				fill: SetAlpha(fillFunc(i), alpha),
+			}
+			grobs = append(grobs, rect)
+
+			color := SetAlpha(colFunc(i), alpha)
+			size := sizeFunc(i)
+			points := make([]struct{ x, y float64 }, 5)
+			points[0].x, points[0].y = x0, y0
+			points[1].x, points[1].y = x1, y0
+			points[2].x, points[2].y = x1, y1
+			points[3].x, points[3].y = x0, y1
+			points[4].x, points[4].y = x0, y0
+			border := GrobPath{
+				points:   points,
+				linetype: lt,
+				color:    color,
+				size:     size,
+			}
+			grobs = append(grobs, border)
+
+			// The lines.
+			grobs = append(grobs, GrobLine{
+				x0: xc, y0: yf(high[i]),
+				x1: xc, y1: yf(q3[i]),
+				linetype: lt, color: color, size: size,
+			})
+			grobs = append(grobs, GrobLine{
+				x0: xc, y0: yf(q1[i]),
+				x1: xc, y1: yf(low[i]),
+				linetype: lt, color: color, size: size,
+			})
+			grobs = append(grobs, GrobLine{
+				x0: x0, y0: yf(mid[i]),
+				x1: x1, y1: yf(mid[i]),
+				linetype: lt, color: color, size: size,
+			})
+
+			// TODO: how to draw outliers?
 		}
-
-		// Coordinates of diagonal corners.
-		xc := xf(x[i])
-		x0 := xf(x[2]-wh)
-		y0 := yf(q1[i])
-		x1, y1 := xf(x[i]+wh), yf(q3[i])
-		// TODO: swap if wrong order
-
-		// The box.
-		lt := LineType(linetypeFunc(i))
-		rect := GrobRect{
-			xmin: x0,
-			ymin: y0,
-			xmax: x1,
-			ymax: y1,
-			fill: SetAlpha(fillFunc(i), alpha),
-		}
-		grobs = append(grobs, rect)
-
-		color := SetAlpha(colFunc(i), alpha)
-		size := sizeFunc(i)
-		points := make([]struct{ x, y float64 }, 5)
-		points[0].x, points[0].y = x0, y0
-		points[1].x, points[1].y = x1, y0
-		points[2].x, points[2].y = x1, y1
-		points[3].x, points[3].y = x0, y1
-		points[4].x, points[4].y = x0, y0
-		border := GrobPath{
-			points:   points,
-			linetype: lt,
-			color:    color,
-			size:     size,
-		}
-		grobs = append(grobs, border)
-
-		// The lines.
-		grobs = append(grobs, GrobLine{
-			x0: xc, y0: yf(high[i]),
-			x1: xc, y1: yf(q3[i]),
-			linetype: lt, color: color, size: size,
-		})
-		grobs = append(grobs, GrobLine{
-			x0: xc, y0: yf(q1[i]),
-			x1: xc, y1: yf(low[i]),
-			linetype: lt, color: color, size: size,
-		})
-		grobs = append(grobs, GrobLine{
-			x0: x0, y0: yf(mid[i]),
-			x1: x1, y1: yf(mid[i]),
-			linetype: lt, color: color, size: size,
-		})
-
-		// TODO: how to draw outliers?
-	}
-	println("XXXXXXX Boxgrobs: ", len(grobs))
-	return grobs
-        */
+		println("XXXXXXX Boxgrobs: ", len(grobs))
+		return grobs
+	*/
 }

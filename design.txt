@@ -246,21 +246,18 @@ Assume a discrete string variable stored like this
 and try to construct a boxplot (or bars) with this string variable
 mapped to x-scale. How to set up, compute, transmit and draw the
 with of the boxes, especially with a dodging position adjustment?
-The idea for discrete x-scale is the following:
-  a) During geom construction the width is set to 0.9 (maybe stylable).
-  b) The x coordinates of the geoms are replaced by logical x-coords,
-     thus foo-->1, bar-->2, waz-->3
-  c) Position adjustments (especially dodge) is applied to this logical
-     x-coords.
-     Thus after geom construction the fundamental geom are always in
-     continuous coordinates!
-  d) The scale is converted to a continuous scale. BAD IDEA.
-  e) Rendering of the geoms happens on a continuous scale.
-
-Other idea:
+Idea:
   - Nothing is really changed during geom construction or rendering.
-  - Geom construction produces continuous fields in the data frames
-  - When these continuous fields are drawn the following
+  - Geom construction produces continuous fields in the data frames,
+    e.g. a dodged boxplot might produce two boxes for "foo" positioned
+    at 2.7 and 3.3 each of width 0.2  
+  - When these continuous fields are drawn on a discrete scale any
+    value x will be decomposed into x == xi + dx with xi an integer
+    and dx in (-0.5,+0.5).  Mapping x (e.g. == 3.2) to the continuous screen
+    coordinates is a two step process:
+      a) look up xi (== 3) in the discrete scale levels: 3==foo --> 1
+      b) add dx, thus producing 1.2
+    and map to natural units. 
 
 
 Geoms

@@ -135,7 +135,7 @@ func (plot *Plot) Compute() {
 		}
 	}
 
-	fmt.Printf("X-Scale\n%s\n", plot.Scales["x"].String())
+	fmt.Printf("X-Scale\n%s\n%+v\n", plot.Scales["x"].String(), *plot.Scales["x"])
 	fmt.Printf("Y-Scale\n%s\n", plot.Scales["y"].String())
 	if cs, ok := plot.Scales["fill"]; ok {
 		fmt.Printf("Fill-Scale\n%s\n", cs.String())
@@ -772,7 +772,7 @@ func (p *Panel) RenderGeoms() {
 			grobs := fund.Geom.Render(p, data, aes)
 			fmt.Printf("RenderGeom on layer %s: %d %s --> %d grobs\n",
 				layer.Name, fi, fund.Geom.Name(), len(grobs))
-			for j,g := range grobs {
+			for j, g := range grobs {
 				fmt.Printf("  %d: %s\n", j, g.String())
 			}
 			layer.Grobs = append(layer.Grobs, grobs...)
