@@ -5,7 +5,6 @@ import (
 	"io"
 	"reflect"
 	"sort"
-	// "strconv"
 	"math"
 	"text/tabwriter"
 	"time"
@@ -632,6 +631,7 @@ func Partition(df *DataFrame, field string, levels []float64) []*DataFrame {
 			}
 			t := part[i].Columns[name]
 			t.Data = append(t.Data, f.Data[j])
+			part[i].N = len(t.Data)
 			part[i].Columns[name] = t
 		}
 	}
