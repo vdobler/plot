@@ -173,6 +173,7 @@ func (path GrobPath) Draw(vp Viewport) {
 	vp.Canvas.SetColor(path.color)
 	vp.Canvas.SetLineWidth(vg.Points(path.size))
 	vp.Canvas.SetLineDash(dashLength[path.linetype], 0)
+	println("XXXX GrobPath.Draw ", len(path.points))
 	x, y := vp.X(path.points[0].x), vp.Y(path.points[0].y)
 	var p vg.Path
 

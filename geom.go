@@ -2,8 +2,6 @@ package plot
 
 import (
 	"fmt"
-	"os"
-	"sort"
 	"strings"
 )
 
@@ -136,9 +134,11 @@ type GeomLine struct {
 
 var _ Geom = GeomLine{}
 
-func (p GeomLine) Name() string            { return "GeomLine" }
-func (p GeomLine) NeededSlots() []string   { return []string{"x", "y"} }
-func (p GeomLine) OptionalSlots() []string { return []string{"color", "size", "linetype", "alpha"} }
+func (p GeomLine) Name() string          { return "GeomLine" }
+func (p GeomLine) NeededSlots() []string { return []string{"x", "y"} }
+func (p GeomLine) OptionalSlots() []string {
+	return []string{"color", "size", "linetype", "alpha", "group"}
+}
 
 func (p GeomLine) Aes(plot *Plot) AesMapping {
 	return MergeStyles(p.Style, plot.Theme.LineStyle, DefaultTheme.LineStyle)
@@ -154,49 +154,61 @@ func (p GeomLine) Construct(df *DataFrame, panel *Panel) []Fundamental {
 
 func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
 	fmt.Printf("GeomLine.Render %d\n", data.N)
-	x, y := data.Columns["x"], data.Columns["y"]
-	grobs := make([]Grob, 0)
-	colFunc := makeColorFunc("color", data, panel, style)
-	sizeFunc := makePosFunc("size", data, panel, style)
-	alphaFunc := makePosFunc("alpha", data, panel, style)
-	typeFunc := makeStyleFunc("linetype", data, panel, style)
-
 	scaleX, scaleY := panel.Scales["x"], panel.Scales["y"]
+	grobs := make([]Grob, 0)
 
-	// TODO: Grouping
-
-	if data.Has("color") || data.Has("size") || data.Has("alpha") || data.Has("linetype") {
-		// Some of the optional aesthetics are mapped (not set).
-		// Cannot represent safely as a GrobPath; thus use lots
-		// of GrobLine.
-		// TODO: instead "of by one" why not use average?
-		for i := 0; i < data.N-1; i++ {
-			line := GrobLine{
-				x0:       scaleX.Pos(x.Data[i]),
-				y0:       scaleY.Pos(y.Data[i]),
-				x1:       scaleX.Pos(x.Data[i+1]),
-				y1:       scaleY.Pos(y.Data[i+1]),
-				color:    SetAlpha(colFunc(i), alphaFunc(i)),
-				size:     sizeFunc(i),
-				linetype: LineType(typeFunc(i)),
-			}
-			grobs = append(grobs, line)
-		}
+	var partitions []*DataFrame
+	var levels []float64
+	if data.Has("group") {
+		groups := Levels(data, "group")
+		levels = groups.Elements()
+		partitions = Partition(data, "group", levels)
+		fmt.Printf("Grouping GeomLine into %d groups: %v\n",
+			len(levels), levels)
 	} else {
-		// All segemtns have same color, linetype and size, use a GrobPath
-		points := make([]struct{ x, y float64 }, data.N)
-		for i := 0; i < data.N; i++ {
-			points[i].x = scaleX.Pos(x.Data[i])
-			points[i].y = scaleY.Pos(y.Data[i])
+		partitions = []*DataFrame{data}
+	}
+
+	for _, part := range partitions {
+		x, y := part.Columns["x"], part.Columns["y"]
+		colFunc := makeColorFunc("color", part, panel, style)
+		sizeFunc := makePosFunc("size", part, panel, style)
+		alphaFunc := makePosFunc("alpha", part, panel, style)
+		typeFunc := makeStyleFunc("linetype", part, panel, style)
+		if part.Has("color") || part.Has("size") ||
+			part.Has("alpha") || part.Has("linetype") {
+			// Some of the optional aesthetics are mapped (not set).
+			// Cannot represent safely as a GrobPath; thus use lots
+			// of GrobLine.
+			// TODO: instead "of by one" why not use average?
+			for i := 0; i < part.N-1; i++ {
+				line := GrobLine{
+					x0:       scaleX.Pos(x.Data[i]),
+					y0:       scaleY.Pos(y.Data[i]),
+					x1:       scaleX.Pos(x.Data[i+1]),
+					y1:       scaleY.Pos(y.Data[i+1]),
+					color:    SetAlpha(colFunc(i), alphaFunc(i)),
+					size:     sizeFunc(i),
+					linetype: LineType(typeFunc(i)),
+				}
+				grobs = append(grobs, line)
+			}
+		} else {
+			// All segemtns have same color, linetype and size, use a GrobPath
+			points := make([]struct{ x, y float64 }, part.N)
+			for i := 0; i < part.N; i++ {
+				points[i].x = scaleX.Pos(x.Data[i])
+				points[i].y = scaleY.Pos(y.Data[i])
+			}
+			path := GrobPath{
+				points:   points,
+				color:    SetAlpha(colFunc(0), alphaFunc(0)),
+				size:     sizeFunc(0),
+				linetype: LineType(typeFunc(0)),
+			}
+			fmt.Printf("path == %s\n", path.String())
+			grobs = append(grobs, path)
 		}
-		path := GrobPath{
-			points:   points,
-			color:    SetAlpha(colFunc(0), alphaFunc(0)),
-			size:     sizeFunc(0),
-			linetype: LineType(typeFunc(0)),
-		}
-		fmt.Printf("path == %s\n", path.String())
-		grobs = append(grobs, path)
 	}
 
 	return grobs
@@ -465,8 +477,6 @@ func (r GeomRect) Aes(plot *Plot) AesMapping {
 }
 
 func (r GeomRect) Construct(df *DataFrame, panel *Panel) []Fundamental {
-	println("GeomRect.Construct()")
-
 	trainScales(panel, df, "x:xmin,xmax y:ymin,ymax")
 	// TODO: optional fields too?
 	return []Fundamental{
@@ -477,7 +487,6 @@ func (r GeomRect) Construct(df *DataFrame, panel *Panel) []Fundamental {
 }
 
 func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
-	println("GeomRect.Render()")
 	xmin, ymin := data.Columns["xmin"].Data, data.Columns["ymin"].Data
 	xmax, ymax := data.Columns["xmax"].Data, data.Columns["ymax"].Data
 	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
@@ -556,39 +565,7 @@ func (b GeomBoxplot) Aes(plot *Plot) AesMapping {
 	return MergeStyles(b.Style, plot.Theme.RectStyle, DefaultTheme.RectStyle)
 }
 
-func makeContinuous(f Field, s *Scale) Field {
-	if !s.Discrete {
-		println("makeCont XXX")
-		return f
-	}
-
-	levels := s.DomainLevels.Elements()
-	sort.Float64s(levels)
-	index := func(x float64) int {
-		i := -1
-		for j, v := range levels {
-			if v == x {
-				i = j
-				break
-			}
-		}
-		return i + 1
-	}
-
-	for i, v := range f.Data {
-		k := index(v)
-		fmt.Printf("making %.2f continuous: %d\n", f.Data[i], k)
-		f.Data[i] = float64(k)
-	}
-
-	f.Type = Float
-
-	return f
-}
-
 func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
-	println("GeomBoxplot.Construct()")
-
 	// min, max := data.Columns["min"].Data, data.Columns["max"].Data
 	low, high := data.Columns["low"].Data, data.Columns["high"].Data
 	q1, q3 := data.Columns["q1"].Data, data.Columns["q3"].Data
@@ -633,9 +610,10 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 		xx.Data[6*i+4], xx.Data[6*i+5] = xc-wh, xc+wh
 		yy.Data[6*i+4], yy.Data[6*i+5] = mid[i], mid[i]
 
-		group := float64(i / 6) // ???
-		gg.Data[6*i], gg.Data[6*i+1], gg.Data[6*i+2] = group, group, group
-		gg.Data[6*i+3], gg.Data[6*i+4], gg.Data[6*i+5] = group, group, group
+		group := float64(3 * i) // ???
+		gg.Data[6*i], gg.Data[6*i+1] = group, group
+		gg.Data[6*i+2], gg.Data[6*i+3] = group+1, group+1
+		gg.Data[6*i+4], gg.Data[6*i+5] = group+2, group+2
 	}
 
 	rects.Columns["xmin"] = xmin
@@ -649,11 +627,6 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 
 	trainScales(panel, rects, "x:xmin,xmax")
 	trainScales(panel, lines, "y:yy") // Bug: should train on real ymin/max
-
-	fmt.Println("Lines:")
-	lines.Print(os.Stdout)
-	fmt.Println("rects:")
-	rects.Print(os.Stdout)
 
 	// TODO: outliers
 
@@ -674,82 +647,5 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 }
 
 func (b GeomBoxplot) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
-	println("GeomBoxplot.Render()")
 	panic("Should not be called...")
-
-	/*
-		xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
-
-		colFunc := makeColorFunc("color", data, panel, style)
-		fillFunc := makeColorFunc("fill", data, panel, style)
-		linetypeFunc := makeStyleFunc("linetype", data, panel, style)
-		alphaFunc := makePosFunc("alpha", data, panel, style)
-		sizeFunc := makePosFunc("size", data, panel, style)
-
-		grobs := make([]Grob, 0)
-		var i int
-		for i = 0; i < data.N; i++ {
-			fmt.Printf("Working on box %d at x=%.1f\n",
-				i, x[i])
-			alpha := alphaFunc(i)
-			if alpha == 0 {
-				// continue // Won't be visibale anyway....
-			}
-
-			// Coordinates of diagonal corners.
-			xc := xf(x[i])
-			x0 := xf(x[2]-wh)
-			y0 := yf(q1[i])
-			x1, y1 := xf(x[i]+wh), yf(q3[i])
-			// TODO: swap if wrong order
-
-			// The box.
-			lt := LineType(linetypeFunc(i))
-			rect := GrobRect{
-				xmin: x0,
-				ymin: y0,
-				xmax: x1,
-				ymax: y1,
-				fill: SetAlpha(fillFunc(i), alpha),
-			}
-			grobs = append(grobs, rect)
-
-			color := SetAlpha(colFunc(i), alpha)
-			size := sizeFunc(i)
-			points := make([]struct{ x, y float64 }, 5)
-			points[0].x, points[0].y = x0, y0
-			points[1].x, points[1].y = x1, y0
-			points[2].x, points[2].y = x1, y1
-			points[3].x, points[3].y = x0, y1
-			points[4].x, points[4].y = x0, y0
-			border := GrobPath{
-				points:   points,
-				linetype: lt,
-				color:    color,
-				size:     size,
-			}
-			grobs = append(grobs, border)
-
-			// The lines.
-			grobs = append(grobs, GrobLine{
-				x0: xc, y0: yf(high[i]),
-				x1: xc, y1: yf(q3[i]),
-				linetype: lt, color: color, size: size,
-			})
-			grobs = append(grobs, GrobLine{
-				x0: xc, y0: yf(q1[i]),
-				x1: xc, y1: yf(low[i]),
-				linetype: lt, color: color, size: size,
-			})
-			grobs = append(grobs, GrobLine{
-				x0: x0, y0: yf(mid[i]),
-				x1: x1, y1: yf(mid[i]),
-				linetype: lt, color: color, size: size,
-			})
-
-			// TODO: how to draw outliers?
-		}
-		println("XXXXXXX Boxgrobs: ", len(grobs))
-		return grobs
-	*/
 }

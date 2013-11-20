@@ -3,9 +3,9 @@ package plot
 import (
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"sort"
-	"math"
 	"text/tabwriter"
 	"time"
 )
