@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"math/rand"
 	"os"
 	"testing"
 )
@@ -393,4 +394,63 @@ func TestDiscreteXScale(t *testing.T) {
 	plot.Layers = append(plot.Layers, &box)
 
 	plot.WritePNG("discrx.png", 800, 600)
+}
+
+func TestBoxplot(t *testing.T) {
+	type d struct {
+		x string
+		y float64
+		t int
+	}
+	data := make([]d, 120)
+	for i := 0; i < 20; i++ {
+		data[i].x = "1"
+		data[i].y = rand.NormFloat64()*5 + 10
+		data[i].t = 8
+
+		data[20+i].x = "2"
+		data[20+i].y = rand.NormFloat64()*2 + 5
+		data[20+i].t = 12
+
+		data[40+i].x = "3"
+		data[40+i].y = rand.NormFloat64()*10 + 5
+		data[40+i].t = 3
+
+		data[60+i].x = "2"
+		data[60+i].y = rand.NormFloat64()*3 + 8
+		data[60+i].t = 7
+
+		data[80+i].x = "3"
+		data[80+i].y = rand.NormFloat64()*4 + 4
+		data[80+i].t = 9
+
+		data[100+i].x = "2"
+		data[100+i].y = rand.NormFloat64()*5 + 0
+		data[100+i].t = 11
+	}
+	// Produce some outliers.
+	data[20].y = 15
+	data[21].y = -5
+	data[105].y = 24
+	data[106].y = 25
+
+	aes := AesMapping{
+		"x":     "x",
+		"y":     "y",
+		"color": "t",
+	}
+	plot, err := NewPlot(data, aes)
+	if err != nil {
+		t.Fatalf("Unxpected error: %s", err)
+	}
+	plot.Title = "Boxplot"
+
+	box := Layer{
+		Name: "Boxplot",
+		Stat: StatBoxplot{},
+		Geom: GeomBoxplot{Position: PosDodge},
+	}
+	plot.Layers = append(plot.Layers, &box)
+
+	plot.WritePNG("boxplot.png", 800, 600)
 }

@@ -478,7 +478,6 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	xs := Levels(data, "x").Elements()
 	sort.Float64s(xs)
 	n := len(xs)
-	fmt.Printf("StatBoxplot of %d values %v\n", n, xs)
 	ys := make(map[float64][]float64)
 
 	pool := data.Pool
@@ -487,7 +486,7 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 	minf, maxf := NewField(n, Float, pool), NewField(n, Float, pool)
 	lowf, highf := NewField(n, Float, pool), NewField(n, Float, pool)
 	q1f, q3f := NewField(n, Float, pool), NewField(n, Float, pool)
-	outf := NewField(0, Vector, pool)
+	outf := NewField(n, Vector, pool)
 
 	for i := 0; i < data.N; i++ {
 		x, y := xd[i], yd[i]
@@ -505,7 +504,7 @@ func (s StatBoxplot) Apply(data *DataFrame, _ *Panel) *DataFrame {
 		q3f.Data[i] = b.q3
 		highf.Data[i] = b.high
 		maxf.Data[i] = b.max
-		outf = outf.AddVec(b.outliers)
+		outf.SetVec(i, b.outliers)
 		i++
 	}
 

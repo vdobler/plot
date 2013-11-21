@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -59,6 +60,7 @@ func NewField(n int, t FieldType, pool *StringPool) Field {
 		Data:   make([]float64, n),
 		Pool:   pool,
 	}
+
 	return f
 }
 
@@ -126,18 +128,12 @@ func (f Field) String(x float64) string {
 		return fmt.Sprintf("%d", f.Int(x))
 	case Time:
 		return f.Time(x).Format("2006-01-02 15:04:05")
-	case String:
+	case String, Vector:
 		i := int(x)
 		if i >= 0 && i < len(f.Pool.pool) {
 			return f.Pool.pool[i]
 		}
 		return "--NA--"
-	case Vector:
-		i := int(x)
-		if i >= len(f.Data) {
-			return "[]"
-		}
-		return fmt.Sprintf("[%.1f...]", f.Data[i])
 	}
 	panic("Oooops")
 }
@@ -172,40 +168,32 @@ func (f Field) AsTime() []time.Time {
 }
 
 // -------------------------------------------------------------------------
-// Fields of Vcctor type.
+// Fields of Vector type.
 
-// f.Data[0] contains how many vectors N are stored in f
-// f.Data[i] for 0<=i<N contain the start of vector i
-//
-
-func (f Field) Vec(i int) []float64 {
-	a := int(f.Data[i])
-	var e int
-	if i+1 < int(f.Data[0]) {
-		e = int(f.Data[i+1])
-	} else {
-		e = len(f.Data)
+func (f Field) GetVec(i int) (ans []float64) {
+	pi := int(f.Data[i])
+	s := f.Pool.Get(pi)
+	if s == "" {
+		return
 	}
-	return f.Data[a:e]
+	for _, t := range strings.Split(s, " ") {
+		v, err := strconv.ParseFloat(t, 64)
+		if err != nil {
+			v = math.NaN()
+		}
+		ans = append(ans, v)
+	}
+	return ans
 }
 
-// AddVec will set the i'th entry in f to v with f having n logical elements.
-// The entries must be filled in strict order.
-func (f Field) AddVec(v []float64) Field {
-	if len(f.Data) == 0 {
-		f.Data = append([]float64{1}, v...)
-	} else {
-		m, k := len(f.Data), int(f.Data[0])
-		d := make([]float64, k+1)
-		for i := 0; i < k; i++ {
-			d[i] = f.Data[i] + 1
-		}
-		d[k] = float64(m + 1)
-		d = append(d, f.Data[k:]...)
-		d = append(d, v...)
-		f.Data = d
+func (f Field) SetVec(i int, v []float64) {
+	s := make([]string, len(v))
+	for i, x := range v {
+		s[i] = fmt.Sprintf("%g", x)
 	}
-	return f
+	ss := strings.Join(s, " ")
+	pi := f.Pool.Add(ss)
+	f.Data[i] = float64(pi)
 }
 
 // -------------------------------------------------------------------------
@@ -605,17 +593,7 @@ func (df *DataFrame) Print(out io.Writer) {
 		for _, name := range names {
 			field := df.Columns[name]
 			var s string
-			if field.Type == Vector {
-				v := field.Vec(i)
-				sv := make([]string, len(v))
-				for j, t := range v {
-					sv[j] = fmt.Sprintf("%.1f", t)
-				}
-				s = strings.Join(sv, ",")
-				s = fmt.Sprintf("[%s]", s)
-			} else {
-				s = field.String(field.Data[i])
-			}
+			s = field.String(field.Data[i])
 			fmt.Fprintf(w, "\t%s", s)
 		}
 		fmt.Fprintln(w)

@@ -375,7 +375,7 @@ func (b GeomBar) Construct(df *DataFrame, panel *Panel) []Fundamental {
 	xmax, ymax := xmaxf.Data, ymaxf.Data
 
 	runningYmax := make(map[float64]float64)
-	barsAt := make(map[float64]float64)
+	barsAt := make(map[float64]float64) // Number of bars at each x pos.
 	for i := 0; i < df.N; i++ {
 		if y := yd[i]; y > 0 {
 			ymin[i] = 0
@@ -548,7 +548,8 @@ func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 // Geom Boxplot
 
 type GeomBoxplot struct {
-	Style AesMapping // The individal fixed, aka non-mapped aesthetics
+	Style    AesMapping // The individal fixed, aka non-mapped aesthetics
+	Position PositionAdjust
 }
 
 var _ Geom = GeomBoxplot{}
@@ -571,13 +572,11 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	q1, q3 := data.Columns["q1"].Data, data.Columns["q3"].Data
 	x, mid := data.Columns["x"].Data, data.Columns["mid"].Data
 	outf := data.Columns["outliers"]
+	fmt.Printf("Outliers field: %v\n", outf.Data)
 
 	// xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
-	with := 0.9 // TODO: determine from data
-	wh := with / 2
-
-	// TODO: Dodging
+	width := 0.9 // TODO: determine from data
 
 	rects := NewDataFrame("Rects of Boxplot of "+data.Name, data.Pool)
 	rects.N = data.N
@@ -596,11 +595,28 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	ox := NewField(0, Float, data.Pool)
 	oy := NewField(0, Float, data.Pool)
 
+	// Count how many bars are draw at each x value.
+	barsAt := make(map[float64]float64)
+	drawnAt := make(map[float64]float64)
+	for i := 0; i < data.N; i++ {
+		barsAt[x[i]]++
+	}
+
 	for i := 0; i < data.N; i++ {
 		i = int(i)
 		fmt.Printf("Working on box %d at x=%.1f\n", i, x[i])
 
 		xc := x[i]
+		wh := width / 2
+
+		if b.Position == PosDodge {
+			total := barsAt[xc]
+			drawn := drawnAt[xc]
+			drawnAt[xc]++
+			wh /= total
+			xc += (2*drawn - (total - 1)) * wh
+		}
+
 		xmin.Data[i], xmax.Data[i] = xc-wh, xc+wh
 
 		y1, y3 := q1[i], q3[i]
@@ -620,9 +636,9 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 		gg.Data[6*i+2], gg.Data[6*i+3] = group+1, group+1
 		gg.Data[6*i+4], gg.Data[6*i+5] = group+2, group+2
 
-		for _, outy := range outf.Vec(i) {
+		for _, q := range outf.GetVec(i) {
 			ox.Data = append(ox.Data, xc)
-			oy.Data = append(oy.Data, outy)
+			oy.Data = append(oy.Data, q)
 		}
 	}
 
