@@ -400,33 +400,33 @@ func TestBoxplot(t *testing.T) {
 	type d struct {
 		x string
 		y float64
-		t int
+		t string
 	}
 	data := make([]d, 120)
 	for i := 0; i < 20; i++ {
 		data[i].x = "1"
 		data[i].y = rand.NormFloat64()*5 + 10
-		data[i].t = 8
+		data[i].t = "A"
 
 		data[20+i].x = "2"
 		data[20+i].y = rand.NormFloat64()*2 + 5
-		data[20+i].t = 12
+		data[20+i].t = "B"
 
 		data[40+i].x = "3"
 		data[40+i].y = rand.NormFloat64()*10 + 5
-		data[40+i].t = 3
+		data[40+i].t = "C"
 
 		data[60+i].x = "2"
 		data[60+i].y = rand.NormFloat64()*3 + 8
-		data[60+i].t = 7
+		data[60+i].t = "D"
 
 		data[80+i].x = "3"
 		data[80+i].y = rand.NormFloat64()*4 + 4
-		data[80+i].t = 9
+		data[80+i].t = "E"
 
 		data[100+i].x = "2"
 		data[100+i].y = rand.NormFloat64()*5 + 0
-		data[100+i].t = 11
+		data[100+i].t = "F"
 	}
 	// Produce some outliers.
 	data[20].y = 15

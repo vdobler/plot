@@ -299,6 +299,9 @@ func (rect GrobRect) Draw(vp Viewport) {
 	vp.Canvas.SetLineWidth(2)
 	xmin, ymin := vp.X(rect.xmin), vp.Y(rect.ymin)
 	xmax, ymax := vp.X(rect.xmax), vp.Y(rect.ymax)
+	fmt.Printf("GrobRect.Draw %.2f/%.2f - %.2f/%.2f  ---> %.0f/%.0f - %.0f/%.0f\n",
+		rect.xmin, rect.ymin, rect.xmax, rect.ymax,
+		xmin, ymin, xmax, ymax)
 	var p vg.Path
 
 	p.Move(xmin, ymin)
@@ -327,10 +330,11 @@ type GrobGroup struct {
 var _ Grob = GrobGroup{}
 
 func (group GrobGroup) Draw(vp Viewport) {
-	x0, y0 := vp.X(group.x0), vp.Y(group.y0)
+	// x0, y0 := vp.X(group.x0), vp.Y(group.y0)
 	vp.Canvas.Push()
-	vp.Canvas.Translate(x0, y0)
+	// vp.Canvas.Translate(x0, y0)
 	for _, g := range group.elements {
+		fmt.Printf("Drawing Group Element %v\n", g)
 		g.Draw(vp)
 	}
 	vp.Canvas.Pop()

@@ -168,13 +168,13 @@ func (plot *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
 	plot.Layout(canvas, width, height)
 
 	// Actual drawing of the general stuff.
-	for _, element := range []string{"Title", "X-Label", "Y-Label"} {
+	for _, element := range []string{"Title", "X-Label", "Y-Label", "Guides"} {
+		println("XXXX", element)
 		if grob, ok := plot.Grobs[element]; ok {
+			println("YYYYY have", element)
 			grob.Draw(plot.Viewports[element])
 		}
 	}
-
-	// TODO: Guides
 
 	// Drawing of the individual panels.
 	showX, showY := false, false
@@ -840,6 +840,21 @@ func (plot *Plot) RenderVisuals() {
 			}
 		}
 	}
+
+	plot.RenderGuides()
+}
+
+func (plot *Plot) RenderGuides() {
+	guides := GrobGroup{}
+	for aes, scale := range plot.Scales {
+		if aes == "x" || aes == "y" {
+			// X and y axes are draw on a per-panel base.
+			continue
+		}
+
+		guides.elements = append(guides.elements, scale.Render())
+	}
+	plot.Grobs["Guides"] = guides
 }
 
 // -------------------------------------------------------------------------
@@ -1057,7 +1072,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	}
 
 	var guidesw vg.Length
-	guidesw = vg.Millimeters(20) // TODO
+	guidesw = vg.Millimeters(40) // TODO
 
 	plot.Viewports["Title"] = Viewport{
 		Canvas: canvas,

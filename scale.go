@@ -302,17 +302,28 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 		return z
 	}
 	s.Color = func(x float64) color.Color {
-		c := s.Pos(x)
-		// TODO (a lot)
-		if c < 1/3 {
-			r := uint8(c * 3 * 255)
-			return color.RGBA{r, 0xff - r, 0, 0xff}
-		} else if c < 2/3 {
-			r := uint8((c - 1/3) * 3 * 255)
-			return color.RGBA{0, r, 0xff - r, 0xff}
-		} else {
-			r := uint8((c - 2/3) * 3 * 255)
-			return color.RGBA{0xff - r, 0, r, 0xff}
+		// TODO: merge with code from continuous
+		// TODO: 1. this uses the expanded range. useful?
+		h := s.Pos(x) * (5.0 / 6.0) // rescale by 5/6 because hue is cyclic
+		hi := int(h * 6)
+		f := h*6 - float64(hi)
+		s := 1.0 // TODO: make configurable?
+		v := 0.8 // TODO: make configurable?
+		p, q, t := v*(1-s), v*(1-s*f), v*(1-s*(1-f))
+		vv, tt, pp, qq := uint8(v*255), uint8(t*255), uint8(p*255), uint8(q*255)
+		switch hi {
+		case 0, 6:
+			return color.RGBA{vv, tt, pp, 0xff}
+		case 1:
+			return color.RGBA{qq, vv, pp, 0xff}
+		case 2:
+			return color.RGBA{pp, vv, tt, 0xff}
+		case 3:
+			return color.RGBA{pp, qq, vv, 0xff}
+		case 4:
+			return color.RGBA{tt, pp, vv, 0xff}
+		case 5:
+			return color.RGBA{vv, pp, qq, 0xff}
 		}
 		return color.RGBA{}
 	}
@@ -348,17 +359,27 @@ func (s *Scale) FinalizeContinous() {
 		return (x - s.Min) / fullRange
 	}
 	s.Color = func(x float64) color.Color {
-		c := s.Pos(x)
-		// TODO (a lot)
-		if c < 1/3 {
-			r := uint8(c * 3 * 255)
-			return color.RGBA{r, 0xff - r, 0, 0xff}
-		} else if c < 2/3 {
-			r := uint8((c - 1/3) * 3 * 255)
-			return color.RGBA{0, r, 0xff - r, 0xff}
-		} else {
-			r := uint8((c - 2/3) * 3 * 255)
-			return color.RGBA{0xff - r, 0, r, 0xff}
+		// TODO: 1. this uses the expanded range. useful?
+		h := s.Pos(x) * (5.0 / 6.0)
+		hi := int(h * 6)
+		f := h*6 - float64(hi)
+		s := 1.0 // TODO: make configurable?
+		v := 0.8 // TODO: make configurable?
+		p, q, t := v*(1-s), v*(1-s*f), v*(1-s*(1-f))
+		vv, tt, pp, qq := uint8(v*255), uint8(t*255), uint8(p*255), uint8(q*255)
+		switch hi {
+		case 0, 6:
+			return color.RGBA{vv, tt, pp, 0xff}
+		case 1:
+			return color.RGBA{qq, vv, pp, 0xff}
+		case 2:
+			return color.RGBA{pp, vv, tt, 0xff}
+		case 3:
+			return color.RGBA{pp, qq, vv, 0xff}
+		case 4:
+			return color.RGBA{tt, pp, vv, 0xff}
+		case 5:
+			return color.RGBA{vv, pp, qq, 0xff}
 		}
 		return color.RGBA{}
 	}
@@ -502,4 +523,56 @@ var SqrtScale = ScaleTransform{
 	Trans:   func(x float64) float64 { return math.Sqrt(x) },
 	Inverse: func(y float64) float64 { return y * y },
 	Format:  func(y float64, s string) string { return fmt.Sprintf("%.1f", y*y) },
+}
+
+// -------------------------------------------------------------------------
+// Rendering of scales
+
+func (s *Scale) Render() Grob {
+	if !s.Discrete || !(s.Aesthetic == "color" || s.Aesthetic == "fill") {
+		fmt.Printf("Can draw only discrete color/fill scale %s %s\n%v\n",
+			s.Aesthetic, s.Name, *s)
+	}
+
+	w := 0.25
+	dw := 0.05
+	h := 0.05
+	dh := 0.01
+
+	grobs := []Grob{}
+
+	y := 0.0
+	for i, v := range s.Breaks {
+		color := s.Color(v)
+		txt := s.Labels[i]
+		fmt.Printf("Guide %s %d %.1f %s col=%v\n", s.Name, i, v, txt, col)
+
+		rect := GrobRect{
+			xmin: 0, xmax: w,
+			ymin: y, ymax: y + h,
+			fill: color,
+		}
+		label := GrobText{
+			x:     w + dw,
+			y:     y + h/2,
+			text:  txt,
+			color: BuiltinColors["black"],
+			vjust: 0.5, hjust: 0,
+		}
+
+		y += h + dh
+		grobs = append(grobs, rect)
+		grobs = append(grobs, label)
+	}
+
+	grobs = append(grobs, GrobText{
+		x: 0, y: y,
+		text:  s.Name,
+		color: BuiltinColors["black"],
+		vjust: 0, hjust: 0,
+	})
+
+	return GrobGroup{
+		elements: grobs,
+	}
 }
