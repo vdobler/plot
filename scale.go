@@ -1,6 +1,7 @@
 package plot
 
 import (
+	"code.google.com/p/plotinum/vg"
 	"fmt"
 	"image/color"
 	"math"
@@ -534,10 +535,17 @@ func (s *Scale) Render() Grob {
 			s.Aesthetic, s.Name, *s)
 	}
 
-	w := 0.25
-	dw := 0.05
-	h := 0.05
-	dh := 0.01
+	if s.Discrete {
+		return s.renderDiscrete()
+	}
+
+	return s.renderContinuous()
+}
+
+func (s *Scale) renderDiscrete() Grob {
+	size := float64(vg.Millimeters(5))
+	dx := float64(vg.Millimeters(2))
+	dy := float64(vg.Millimeters(2))
 
 	grobs := []Grob{}
 
@@ -545,22 +553,21 @@ func (s *Scale) Render() Grob {
 	for i, v := range s.Breaks {
 		color := s.Color(v)
 		txt := s.Labels[i]
-		fmt.Printf("Guide %s %d %.1f %s col=%v\n", s.Name, i, v, txt, col)
 
 		rect := GrobRect{
-			xmin: 0, xmax: w,
-			ymin: y, ymax: y + h,
+			xmin: 0, xmax: size,
+			ymin: y, ymax: y + size,
 			fill: color,
 		}
 		label := GrobText{
-			x:     w + dw,
-			y:     y + h/2,
+			x:     size + dx,
+			y:     y + size/2,
 			text:  txt,
 			color: BuiltinColors["black"],
 			vjust: 0.5, hjust: 0,
 		}
 
-		y += h + dh
+		y += size + dy
 		grobs = append(grobs, rect)
 		grobs = append(grobs, label)
 	}
@@ -571,6 +578,64 @@ func (s *Scale) Render() Grob {
 		color: BuiltinColors["black"],
 		vjust: 0, hjust: 0,
 	})
+
+	return GrobGroup{
+		elements: grobs,
+	}
+}
+
+func (s *Scale) renderContinuous() Grob {
+	width := float64(vg.Millimeters(5))
+	height := float64(vg.Millimeters(30))
+	sep := float64(vg.Millimeters(2))
+
+	grobs := []Grob{}
+
+	// The gradient and a box around.
+	y := 0.0
+	dy := height / 50
+	v := s.Min
+	dv := (s.Max - s.Min) / 50
+	for y < height {
+		col := s.Color(v)
+		grobs = append(grobs, GrobRect{
+			xmin: 0, xmax: width,
+			ymin: y, ymax: y + dy,
+			fill: col,
+		})
+
+		y += dy
+		v += dv
+	}
+	/*
+		grobs = append(grobs, GrobPath{
+			points: []struct{x,y float64}{
+				{0, 0},
+			}
+			color: BuiltinColors["black"],
+		})
+	*/
+
+	for i, v := range s.Breaks {
+		txt := s.Labels[i]
+		y = s.Pos(v) * height
+		grobs = append(grobs, GrobLine{
+			x0: 0, x1: width,
+			y0: y, y1: y,
+			size:     1,
+			linetype: SolidLine,
+			color:    BuiltinColors["black"],
+		})
+		if txt != "" {
+			grobs = append(grobs, GrobText{
+				x:     width + sep,
+				y:     y,
+				text:  txt,
+				color: BuiltinColors["black"],
+				vjust: 0.5, hjust: 0,
+			})
+		}
+	}
 
 	return GrobGroup{
 		elements: grobs,

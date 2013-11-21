@@ -348,10 +348,15 @@ func (group GrobGroup) String() string {
 // Viewport
 
 type Viewport struct {
-	// The lower left corner, width and height of this vp
-	// in canvas units
-	X0, Y0, Width, Height vg.Length
-	Canvas                vg.Canvas
+	Canvas vg.Canvas
+
+	// All coordinates and widths/heights in canvas units.
+	X0, Y0        vg.Length // The lower left corner of this vp
+	Width, Height vg.Length // The width and height of this vp
+
+	// Direct to true interpretes geom coordinates a direct
+	// length and uses them unscaled.
+	Direct bool
 }
 
 func (vp Viewport) String() string {
@@ -375,12 +380,22 @@ func (vp Viewport) Sub(x0, y0, width, height float64) Viewport {
 
 // X and Y turn natural grob coordinates [0,1] to canvas lengths.
 func (vp Viewport) X(x float64) vg.Length {
-	ans := vp.X0 + vg.Length(x)*vp.Width
+	ans := vp.X0
+	if !vp.Direct {
+		ans += vg.Length(x) * vp.Width
+	} else {
+		ans += vg.Length(x)
+	}
 	// fmt.Printf("X( %.3f ) = %.1fin\n", x, ans.Inches())
 	return ans
 }
 func (vp Viewport) Y(y float64) vg.Length {
-	ans := vp.Y0 + vg.Length(y)*vp.Height
+	ans := vp.Y0
+	if !vp.Direct {
+		ans += vg.Length(y) * vp.Height
+	} else {
+		ans += vg.Length(y)
+	}
 	// fmt.Printf("Y( %.3f ) = %.1fin\n", y, ans.Inches())
 	return ans
 }

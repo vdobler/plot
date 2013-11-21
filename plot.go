@@ -1094,6 +1094,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 		Canvas: canvas,
 		X0:     width - guidesw, Y0: xlabelh,
 		Width: guidesw, Height: height - titleh - xlabelh,
+		Direct: true,
 	}
 
 	// Col- and Row-Labels, X- and Y-Tics
