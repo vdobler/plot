@@ -1266,8 +1266,8 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 
 	// Draw the layers.
 	for _, layer := range panel.Layers {
-		for gi, g := range layer.Grobs {
-			fmt.Printf("Drawing on layer %s: %d %s\n", layer.Name, gi, g.String())
+		for _, g := range layer.Grobs {
+			// fmt.Printf("Drawing on layer %s: %d %s\n", layer.Name, gi, g.String())
 			g.Draw(vp)
 		}
 	}

@@ -255,7 +255,7 @@ func (text GrobText) Draw(vp Viewport) {
 	vp.Canvas.Translate(x-dx, y-dy)
 	vp.Canvas.Rotate(text.angle)
 	vp.Canvas.FillString(font, 0, 0, text.text)
-	fmt.Printf("Printed %s %.1f %.1f\n", text.String(), ww, hh)
+	// fmt.Printf("Printed %s %.1f %.1f\n", text.String(), ww, hh)
 	vp.Canvas.Pop()
 
 }
