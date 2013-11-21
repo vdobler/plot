@@ -435,9 +435,9 @@ func TestBoxplot(t *testing.T) {
 	data[106].y = 25
 
 	aes := AesMapping{
-		"x":     "x",
-		"y":     "y",
-		"color": "t",
+		"x":    "x",
+		"y":    "y",
+		"fill": "t",
 	}
 	plot, err := NewPlot(data, aes)
 	if err != nil {

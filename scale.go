@@ -296,8 +296,8 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 		w := float64(i+1) + dx
 		// Scale to [0,1]
 		z := (w - s.Min) / fullRange
-		fmt.Printf("s.Pos(%.2f) xi=%.0f dx=%.2f i=%d w=%.1f --> %.2f  (s.Min=%.1f s.Max=%.1f)\n",
-			x, xi, dx, i, w, z, s.Min, s.Max)
+		// fmt.Printf("s.Pos(%.2f) xi=%.0f dx=%.2f i=%d w=%.1f --> %.2f  (s.Min=%.1f s.Max=%.1f)\n",
+		//	x, xi, dx, i, w, z, s.Min, s.Max)
 
 		return z
 	}

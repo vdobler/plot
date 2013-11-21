@@ -108,8 +108,6 @@ func (p GeomPoint) Render(panel *Panel, data *DataFrame, style AesMapping) []Gro
 	shapeFunc := makeStyleFunc("shape", data, panel, style)
 
 	for i := 0; i < data.N; i++ {
-		fmt.Printf("GeomPoint.Render x=%.2f  -->  %.2f\n",
-			x.Data[i], xf(x.Data[i]))
 		points[i].x = xf(x.Data[i])
 		points[i].y = yf(y.Data[i])
 		color := colFunc(i)
@@ -153,7 +151,6 @@ func (p GeomLine) Construct(df *DataFrame, panel *Panel) []Fundamental {
 }
 
 func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob {
-	fmt.Printf("GeomLine.Render %d\n", data.N)
 	scaleX, scaleY := panel.Scales["x"], panel.Scales["y"]
 	grobs := make([]Grob, 0)
 
@@ -163,8 +160,6 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 		groups := Levels(data, "group")
 		levels = groups.Elements()
 		partitions = Partition(data, "group", levels)
-		fmt.Printf("Grouping GeomLine into %d groups: %v\n",
-			len(levels), levels)
 	} else {
 		partitions = []*DataFrame{data}
 	}
@@ -206,7 +201,6 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 				size:     sizeFunc(0),
 				linetype: LineType(typeFunc(0)),
 			}
-			fmt.Printf("path == %s\n", path.String())
 			grobs = append(grobs, path)
 		}
 	}
@@ -517,7 +511,7 @@ func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 			fill: SetAlpha(fillFunc(i), alpha),
 		}
 		grobs = append(grobs, rect)
-		fmt.Printf("GeomRect: rect = %s\n", rect.String())
+		// fmt.Printf("GeomRect: %d %v rect = %s\n", i, fillFunc(i), rect.String())
 
 		// Drown border only if linetype != blank.
 		lt := LineType(linetypeFunc(i))
@@ -538,7 +532,7 @@ func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 			size:     sizeFunc(i),
 		}
 		grobs = append(grobs, border)
-		fmt.Printf("GeomRect: border = %s\n", border.String())
+		// fmt.Printf("GeomRect: border = %s\n", border.String())
 	}
 
 	return grobs
@@ -558,9 +552,7 @@ func (b GeomBoxplot) Name() string { return "GeomBoxplot" }
 func (b GeomBoxplot) NeededSlots() []string {
 	return []string{"x", "min", "low", "mid", "high", "max"}
 }
-func (b GeomBoxplot) OptionalSlots() []string {
-	return []string{"color", "fill", "linetype", "alpha", "size"}
-}
+func (b GeomBoxplot) OptionalSlots() []string { return []string{"fill"} }
 
 func (b GeomBoxplot) Aes(plot *Plot) AesMapping {
 	return MergeStyles(b.Style, plot.Theme.RectStyle, DefaultTheme.RectStyle)
@@ -572,9 +564,6 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	q1, q3 := data.Columns["q1"].Data, data.Columns["q3"].Data
 	x, mid := data.Columns["x"].Data, data.Columns["mid"].Data
 	outf := data.Columns["outliers"]
-	fmt.Printf("Outliers field: %v\n", outf.Data)
-
-	// xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
 	width := 0.9 // TODO: determine from data
 
@@ -646,6 +635,9 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 	rects.Columns["xmax"] = xmax
 	rects.Columns["ymin"] = ymin
 	rects.Columns["ymax"] = ymax
+	if data.Has("fill") {
+		rects.Columns["fill"] = data.Columns["fill"]
+	}
 
 	lines.Columns["x"] = xx
 	lines.Columns["y"] = yy
