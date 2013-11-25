@@ -529,20 +529,19 @@ var SqrtScale = ScaleTransform{
 // -------------------------------------------------------------------------
 // Rendering of scales
 
-func (s *Scale) Render() Grob {
-	if !s.Discrete || !(s.Aesthetic == "color" || s.Aesthetic == "fill") {
-		fmt.Printf("Can draw only discrete color/fill scale %s %s\n%v\n",
-			s.Aesthetic, s.Name, *s)
+func (s *Scale) Render() (grobs Grob, width vg.Length, height vg.Length) {
+	if s.Aesthetic == "color" || s.Aesthetic == "fill" {
+		if s.Discrete {
+			return s.renderColorDiscrete()
+		} else {
+			return s.renderColorContinuous()
+		}
 	}
-
-	if s.Discrete {
-		return s.renderDiscrete()
-	}
-
-	return s.renderContinuous()
+	panic("Implement me")
 }
 
-func (s *Scale) renderDiscrete() Grob {
+// renderColorDiscrete renders a discrete color scale
+func (s *Scale) renderColorDiscrete() (g Grob, width vg.Length, height vg.Length) {
 	size := float64(vg.Millimeters(5))
 	dx := float64(vg.Millimeters(2))
 	dy := float64(vg.Millimeters(2))
@@ -566,78 +565,116 @@ func (s *Scale) renderDiscrete() Grob {
 			color: BuiltinColors["black"],
 			vjust: 0.5, hjust: 0,
 		}
+		lw, _ := label.BoundingBox()
+		if width < lw {
+			width = lw
+		}
 
 		y += size + dy
 		grobs = append(grobs, rect)
 		grobs = append(grobs, label)
 	}
 
-	grobs = append(grobs, GrobText{
+	title := GrobText{
 		x: 0, y: y,
 		text:  s.Name,
 		color: BuiltinColors["black"],
 		vjust: 0, hjust: 0,
-	})
-
-	return GrobGroup{
-		elements: grobs,
 	}
+	tw, th := title.BoundingBox()
+	if width < tw {
+		width = tw
+	}
+	grobs = append(grobs, title)
+
+	width += vg.Length(size + dx)
+	height = vg.Length(y) + th
+
+	return GrobGroup{elements: grobs}, width, height
 }
 
-func (s *Scale) renderContinuous() Grob {
-	width := float64(vg.Millimeters(5))
-	height := float64(vg.Millimeters(30))
+// renders a continuous color scale
+func (s *Scale) renderColorContinuous() (g Grob, width vg.Length, height vg.Length) {
+	sizeX := float64(vg.Millimeters(6))
+	sizeY := float64(vg.Millimeters(50))
 	sep := float64(vg.Millimeters(2))
+	tic := float64(vg.Millimeters(1.5))
 
 	grobs := []Grob{}
 
-	// The gradient and a box around.
+	// The color gradient.
 	y := 0.0
-	dy := height / 50
+	dy := sizeY / 50
 	v := s.Min
 	dv := (s.Max - s.Min) / 50
-	for y < height {
+	overlap := 0.4
+	for y < sizeY {
 		col := s.Color(v)
 		grobs = append(grobs, GrobRect{
-			xmin: 0, xmax: width,
-			ymin: y, ymax: y + dy,
+			xmin: 0, xmax: sizeX,
+			ymin: y - overlap, ymax: y + dy + overlap,
 			fill: col,
 		})
 
 		y += dy
 		v += dv
 	}
-	/*
-		grobs = append(grobs, GrobPath{
-			points: []struct{x,y float64}{
-				{0, 0},
-			}
-			color: BuiltinColors["black"],
-		})
-	*/
 
+	// Levels and tics.
 	for i, v := range s.Breaks {
 		txt := s.Labels[i]
-		y = s.Pos(v) * height
+		y = s.Pos(v) * sizeY
 		grobs = append(grobs, GrobLine{
-			x0: 0, x1: width,
+			x0: 0, x1: tic,
 			y0: y, y1: y,
 			size:     1,
 			linetype: SolidLine,
-			color:    BuiltinColors["black"],
+			color:    BuiltinColors["white"],
+		})
+		grobs = append(grobs, GrobLine{
+			x0: sizeX - tic, x1: sizeX,
+			y0: y, y1: y,
+			size:     1,
+			linetype: SolidLine,
+			color:    BuiltinColors["white"],
 		})
 		if txt != "" {
-			grobs = append(grobs, GrobText{
-				x:     width + sep,
+			label := GrobText{
+				x:     sizeX + sep,
 				y:     y,
 				text:  txt,
 				color: BuiltinColors["black"],
+				size:  12,         // TODO: make configurable
 				vjust: 0.5, hjust: 0,
-			})
+			}
+			lw, _ := label.BoundingBox()
+			fmt.Printf("LabelWidth = %.4f\n", lw)
+			if width < lw {
+				width = lw
+			}
+			fmt.Printf("TotalWidth = %.1f\n", width)
+			grobs = append(grobs, label)
 		}
 	}
 
-	return GrobGroup{
-		elements: grobs,
+	// Title
+	title := GrobText{
+		x: 0, y: sizeY + sep,
+		text:  s.Name,
+		size:  12, // TODO: make configurable
+		color: BuiltinColors["black"],
+		vjust: 0, hjust: 0,
 	}
+	grobs = append(grobs, title)
+	tw, th := title.BoundingBox()
+	fmt.Printf("TitelWidth = %.1f\n", tw)
+	if width < tw {
+		width = tw
+	}
+	fmt.Printf("TotalWidth = %.1f\n", width)
+
+	width += vg.Length(sizeX + sep)
+	height = vg.Length(sizeY+sep) + th
+
+	return GrobGroup{elements: grobs}, width, height
 }

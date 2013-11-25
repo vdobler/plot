@@ -59,6 +59,10 @@ type Plot struct {
 	Grobs map[string]Grob
 
 	constructed bool
+
+	// ugly hack to save dimensions of plot visuals between rendering
+	// and layouting...
+	renderInfo map[string]vg.Length
 }
 
 // NewPlot creates a new plot. Data must be a SOM or a COS and aesthetics
@@ -85,6 +89,7 @@ func NewPlot(data interface{}, aesthetics AesMapping) (*Plot, error) {
 		Pool:        pool,
 		Grobs:       make(map[string]Grob),
 		constructed: false,
+		renderInfo:  make(map[string]vg.Length),
 	}
 
 	return &plot, nil
@@ -226,6 +231,7 @@ type Layer struct {
 
 	// DataMapping is combined with the plot's AesMapping and used to
 	// map fields in Data to aesthetics.
+	// TODO: Why not name it AesMapping like in Plot?
 	DataMapping AesMapping
 
 	// Stat is the statistical transformation used in this layer.
@@ -791,6 +797,8 @@ func (plot *Plot) RenderVisuals() {
 		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
 			text: plot.Title, size: size}
 		plot.Grobs["Title"] = g
+		_, h := g.BoundingBox()
+		plot.renderInfo["Title.Height"] = h
 	}
 	if name := plot.Scales["x"].Name; name != "" {
 		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
@@ -798,12 +806,16 @@ func (plot *Plot) RenderVisuals() {
 		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
 			text: name, size: size}
 		plot.Grobs["X-Label"] = g
+		_, h := g.BoundingBox()
+		plot.renderInfo["X-Label.Height"] = h
 	}
 	if name := plot.Scales["y"].Name; name != "" {
 		style := MergeStyles(plot.Theme.Label, DefaultTheme.Label)
 		size := String2Float(style["size"], 0, 100)
 		g := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5, text: name,
 			angle: math.Pi / 2, size: size}
+		w, _ := g.BoundingBox()
+		plot.renderInfo["Y-Label.Width"] = w
 		plot.Grobs["Y-Label"] = g
 	}
 
@@ -814,47 +826,66 @@ func (plot *Plot) RenderVisuals() {
 	stripSize := String2Float(strip["size"], 4, 100)
 	if len(plot.Faceting.RowStrips) > 0 {
 		ncols := len(plot.Panels[0])
+		maxWidth := vg.Length(0)
 		for r := range plot.Panels {
 			strip := plot.Faceting.RowStrips[r]
 			// TDOO: Add border.
-			plot.Panels[r][ncols-1].Rgr = []Grob{
-				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
-					fill: stripBG},
-				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-					text: strip, angle: math.Pi / 2,
-					size: stripSize, color: stripCol},
+			rect := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: stripBG}
+			text := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+				text: strip, angle: math.Pi / 2,
+				size: stripSize, color: stripCol}
+			plot.Panels[r][ncols-1].Rgr = []Grob{rect, text}
+			w, _ := text.BoundingBox()
+			if w > maxWidth {
+				maxWidth = w
 			}
+			fmt.Printf("Strip %q %.1f %.1f\n", strip, w, maxWidth)
 		}
+		plot.renderInfo["Row-Strip.Width"] = maxWidth
 	}
 	if len(plot.Faceting.ColStrips) > 0 {
 		nrows := len(plot.Panels)
+		maxHeight := vg.Length(0)
 		for c := range plot.Panels[0] {
 			strip := plot.Faceting.ColStrips[c]
 			// TDOO: Add border.
-			plot.Panels[nrows-1][c].Tgr = []Grob{
-				GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1,
-					fill: stripBG},
-				GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
-					text: strip, angle: 0,
-					size: stripSize, color: stripCol},
+			rect := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: stripBG}
+			text := GrobText{x: 0.5, y: 0.5, vjust: 0.5, hjust: 0.5,
+				text: strip, angle: 0,
+				size: stripSize, color: stripCol}
+			plot.Panels[nrows-1][c].Tgr = []Grob{rect, text}
+			_, h := text.BoundingBox()
+			if h > maxHeight {
+				maxHeight = h
 			}
 		}
+		plot.renderInfo["Col-Strip.Height"] = maxHeight
 	}
-
 	plot.RenderGuides()
 }
 
 func (plot *Plot) RenderGuides() {
-	guides := GrobGroup{}
+	maxWidth := vg.Length(0)
+	yCum := vg.Length(0)
+	ySep := vg.Length(5) // TODO; make configurable
+	guides := GrobGroup{x0: 0, y0: 0}
 	for aes, scale := range plot.Scales {
 		if aes == "x" || aes == "y" {
 			// X and y axes are draw on a per-panel base.
 			continue
 		}
 
-		guides.elements = append(guides.elements, scale.Render())
+		grobs, width, height := scale.Render()
+		if width > maxWidth {
+			maxWidth = width
+		}
+		gg := grobs.(GrobGroup)
+		gg.y0 = float64(yCum)
+		guides.elements = append(guides.elements, gg)
+		yCum += height + ySep
 	}
 	plot.Grobs["Guides"] = guides
+	plot.renderInfo["Guides.Width"] = maxWidth
 }
 
 // -------------------------------------------------------------------------
@@ -1052,27 +1083,27 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	// The basic elements: Title, axis labels and guides.
 
 	var titleh vg.Length
-	if t, ok := plot.Grobs["Title"]; ok {
-		_, titleh = t.(GrobText).BoundingBox()
+	if _, ok := plot.Grobs["Title"]; ok {
+		titleh = plot.renderInfo["Title.Height"]
 		fmt.Printf("titleh = %.1f mm\n", titleh.Millimeters())
 		titleh += vg.Millimeters(2) // TODO: make configurable
 		fmt.Printf("titleh = %.1f mm\n", titleh.Millimeters())
 	}
 
 	var ylabelw vg.Length
-	if t, ok := plot.Grobs["Y-Label"]; ok {
-		ylabelw, _ = t.(GrobText).BoundingBox()
+	if _, ok := plot.Grobs["Y-Label"]; ok {
+		ylabelw = plot.renderInfo["Y-Label.Width"]
 		ylabelw += vg.Millimeters(2) // TODO: make configurable
 	}
 
 	var xlabelh vg.Length
-	if t, ok := plot.Grobs["X-Label"]; ok {
-		_, xlabelh = t.(GrobText).BoundingBox()
+	if _, ok := plot.Grobs["X-Label"]; ok {
+		xlabelh = plot.renderInfo["X-Label.Height"]
 		xlabelh += vg.Millimeters(2) // TODO: make configurable
 	}
 
-	var guidesw vg.Length
-	guidesw = vg.Millimeters(40) // TODO
+	guidesSep := vg.Millimeters(2) // TODO: make configurable
+	guidesw := plot.renderInfo["Guides.Width"] + 2*guidesSep
 
 	plot.Viewports["Title"] = Viewport{
 		Canvas: canvas,
@@ -1092,7 +1123,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 
 	plot.Viewports["Guides"] = Viewport{
 		Canvas: canvas,
-		X0:     width - guidesw, Y0: xlabelh,
+		X0:     width - guidesw + guidesSep, Y0: xlabelh,
 		Width: guidesw, Height: height - titleh - xlabelh,
 		Direct: true,
 	}
@@ -1101,8 +1132,8 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	var xticsh, yticsw vg.Length
 	var collabh, rowlabw vg.Length
 	yticsw, xticsh = plot.ticsExtents()
-	collabh = vg.Millimeters(10) // TODO
-	rowlabw = vg.Millimeters(10) // TODO
+	collabh = plot.renderInfo["Col-Strip.Height"] + vg.Millimeters(2) // TODO: make configurabel
+	rowlabw = plot.renderInfo["Row-Strip.Width"] + vg.Millimeters(2)  // TODO: make configurabel
 
 	sepx := vg.Millimeters(2) // TODO: make configurabel
 	sepy := vg.Millimeters(2) // TODO: make configurabel
