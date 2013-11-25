@@ -452,5 +452,29 @@ func TestBoxplot(t *testing.T) {
 	}
 	plot.Layers = append(plot.Layers, &box)
 
+	data1 := []d{
+		{"1", 0, 1},
+		{"1", 5, 2},
+		{"1", 10, 3},
+		{"2", 2, 4},
+		{"2", 7, 5},
+		{"2", 12, 6},
+		{"3", 4, 7},
+		{"3", 9, 8},
+		{"3", 14, 9},
+	}
+	df, _ := NewDataFrameFrom(data1, plot.Pool)
+	points := Layer{
+		Name: "Points",
+		Data: df,
+		DataMapping: AesMapping{
+			"x":     "x",
+			"y":     "y",
+			"shape": "t",
+		},
+		Geom: GeomPoint{},
+	}
+	plot.Layers = append(plot.Layers, &points)
+
 	plot.WritePNG("boxplot.png", 800, 600)
 }

@@ -331,8 +331,9 @@ var _ Grob = GrobGroup{}
 
 func (group GrobGroup) Draw(vp Viewport) {
 	// x0, y0 := vp.X(group.x0), vp.Y(group.y0)
+	// fmt.Printf("Guides translate %.1f %.1f\n", x0,y0)
 	vp.Canvas.Push()
-	// vp.Canvas.Translate(x0, y0)
+	vp.Canvas.Translate(vg.Length(group.x0), vg.Length(group.y0))
 	for _, g := range group.elements {
 		fmt.Printf("Drawing Group Element %v\n", g)
 		g.Draw(vp)

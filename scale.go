@@ -537,7 +537,89 @@ func (s *Scale) Render() (grobs Grob, width vg.Length, height vg.Length) {
 			return s.renderColorContinuous()
 		}
 	}
-	panic("Implement me")
+
+	return s.renderOther()
+}
+
+// renderOther renders all non-color scales.
+// TODO: combine with renderColorDiscrete
+func (s *Scale) renderOther() (g Grob, width vg.Length, height vg.Length) {
+	size := float64(vg.Millimeters(5))
+	dx := float64(vg.Millimeters(2))
+	dy := float64(vg.Millimeters(2))
+
+	grobs := []Grob{}
+	bgCol := BuiltinColors["gray80"]
+
+	y := 0.0
+	for i, v := range s.Breaks {
+		// Gray background and label.
+		rect := GrobRect{
+			xmin: 0, xmax: size,
+			ymin: y, ymax: y + size,
+			fill: bgCol,
+		}
+		label := GrobText{
+			x:     size + dx,
+			y:     y + size/2,
+			text:  s.Labels[i],
+			color: BuiltinColors["black"],
+			vjust: 0.5, hjust: 0,
+		}
+		lw, _ := label.BoundingBox()
+		if width < lw {
+			width = lw
+		}
+
+		// The actual key. TODO: think abut it at least a tiny bit, please!
+		// TODO: the non-mapped aestetics should be settable by the user/geom/theme/whatever.
+		var key Grob
+		switch s.Aesthetic {
+		case "size":
+			key = GrobPoint{
+				x: size / 2, y: y + size/2,
+				size:  s.Pos(v),
+				shape: SolidCirclePoint,
+				color: BuiltinColors["blue"],
+			}
+		case "shape":
+			key = GrobPoint{
+				x: size / 2, y: y + size/2,
+				size:  5,
+				shape: PointShape(s.Style(v)),
+				color: BuiltinColors["blue"],
+			}
+		case "linetype":
+			key = GrobLine{
+				x0: 0, y0: y + size/2, x1: size, y1: y + size/2,
+				size:     3,
+				linetype: LineType(s.Style(v)),
+				color:    BuiltinColors["blue"],
+			}
+		}
+
+		y += size + dy
+		grobs = append(grobs, rect)
+		grobs = append(grobs, key)
+		grobs = append(grobs, label)
+	}
+
+	title := GrobText{
+		x: 0, y: y,
+		text:  s.Name,
+		color: BuiltinColors["black"],
+		vjust: 0, hjust: 0,
+	}
+	tw, th := title.BoundingBox()
+	if width < tw {
+		width = tw
+	}
+	grobs = append(grobs, title)
+
+	width += vg.Length(size + dx)
+	height = vg.Length(y) + th
+
+	return GrobGroup{elements: grobs}, width, height
 }
 
 // renderColorDiscrete renders a discrete color scale
