@@ -174,9 +174,7 @@ func (plot *Plot) DumpTo(canvas vg.Canvas, width, height vg.Length) {
 
 	// Actual drawing of the general stuff.
 	for _, element := range []string{"Title", "X-Label", "Y-Label", "Guides"} {
-		println("XXXX", element)
 		if grob, ok := plot.Grobs[element]; ok {
-			println("YYYYY have", element)
 			grob.Draw(plot.Viewports[element])
 		}
 	}
@@ -405,7 +403,6 @@ func (panel *Panel) PrepareData() {
 //
 // Step 2b
 func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
-	println("PrepareScales data:")
 	scaleable := map[string]bool{
 		"x":        true,
 		"y":        true,
@@ -772,15 +769,10 @@ func (p *Panel) RenderGeoms() {
 		if len(layer.Fundamentals) == 0 {
 			continue
 		}
-		for fi, fund := range layer.Fundamentals {
+		for _, fund := range layer.Fundamentals {
 			data := fund.Data
 			aes := fund.Geom.Aes(p.Plot)
 			grobs := fund.Geom.Render(p, data, aes)
-			fmt.Printf("RenderGeom on layer %s: %d %s --> %d grobs\n",
-				layer.Name, fi, fund.Geom.Name(), len(grobs))
-			for j, g := range grobs {
-				fmt.Printf("  %d: %s\n", j, g.String())
-			}
 			layer.Grobs = append(layer.Grobs, grobs...)
 		}
 	}
@@ -870,7 +862,6 @@ func (plot *Plot) RenderGuides() {
 	ySep := vg.Length(5) // TODO; make configurable
 	guides := GrobGroup{x0: 0, y0: 0}
 	for aes, scale := range plot.Scales {
-		fmt.Printf("Guides aes=%q\n", aes)
 		if aes == "x" || aes == "y" {
 			// X and y axes are draw on a per-panel base.
 			continue
@@ -882,10 +873,8 @@ func (plot *Plot) RenderGuides() {
 		}
 		gg := grobs.(GrobGroup)
 		gg.y0 = float64(yCum)
-		fmt.Printf("Guides yCum=%.1f gg.y0=%.1f\n", yCum, gg.y0)
 		guides.elements = append(guides.elements, gg)
 		yCum += height + ySep
-		fmt.Printf("Guides height=%.1f --> yCum=%.1f\n", height, yCum)
 	}
 	plot.Grobs["Guides"] = guides
 	plot.renderInfo["Guides.Width"] = maxWidth

@@ -730,11 +730,9 @@ func (s *Scale) renderColorContinuous() (g Grob, width vg.Length, height vg.Leng
 				vjust: 0.5, hjust: 0,
 			}
 			lw, _ := label.BoundingBox()
-			fmt.Printf("LabelWidth = %.4f\n", lw)
 			if width < lw {
 				width = lw
 			}
-			fmt.Printf("TotalWidth = %.1f\n", width)
 			grobs = append(grobs, label)
 		}
 	}
@@ -749,11 +747,9 @@ func (s *Scale) renderColorContinuous() (g Grob, width vg.Length, height vg.Leng
 	}
 	grobs = append(grobs, title)
 	tw, th := title.BoundingBox()
-	fmt.Printf("TitelWidth = %.1f\n", tw)
 	if width < tw {
 		width = tw
 	}
-	fmt.Printf("TotalWidth = %.1f\n", width)
 
 	width += vg.Length(sizeX + sep)
 	height = vg.Length(sizeY+sep) + th

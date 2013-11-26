@@ -591,7 +591,6 @@ func (b GeomBoxplot) Construct(data *DataFrame, panel *Panel) []Fundamental {
 
 	for i := 0; i < data.N; i++ {
 		i = int(i)
-		fmt.Printf("Working on box %d at x=%.1f\n", i, x[i])
 
 		xc := x[i]
 		wh := width / 2

@@ -472,7 +472,12 @@ func TestBoxplot(t *testing.T) {
 			"y":    "y",
 			"size": "t",
 		},
-		Geom: GeomPoint{},
+		Geom: GeomPoint{
+			Style: AesMapping{
+				"color": "#369cf1",
+				"shape": "soliddiamond",
+			},
+		},
 	}
 	plot.Layers = append(plot.Layers, &points)
 
