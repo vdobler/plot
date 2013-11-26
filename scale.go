@@ -530,20 +530,15 @@ var SqrtScale = ScaleTransform{
 // Rendering of scales
 
 func (s *Scale) Render() (grobs Grob, width vg.Length, height vg.Length) {
-	if s.Aesthetic == "color" || s.Aesthetic == "fill" {
-		if s.Discrete {
-			return s.renderColorDiscrete()
-		} else {
-			return s.renderColorContinuous()
-		}
+	if !s.Discrete && (s.Aesthetic == "color" || s.Aesthetic == "fill") {
+		return s.renderColorContinuous()
 	}
-
-	return s.renderOther()
+	return s.renderDiscrete()
 }
 
 // renderOther renders all non-color scales.
 // TODO: combine with renderColorDiscrete
-func (s *Scale) renderOther() (g Grob, width vg.Length, height vg.Length) {
+func (s *Scale) renderDiscrete() (g Grob, width vg.Length, height vg.Length) {
 	size := float64(vg.Millimeters(6))
 	dx := float64(vg.Millimeters(2))
 	dy := float64(vg.Millimeters(2))
@@ -592,68 +587,22 @@ func (s *Scale) renderOther() (g Grob, width vg.Length, height vg.Length) {
 		case "linetype":
 			key = GrobLine{
 				x0: 0, y0: y + size/2, x1: size, y1: y + size/2,
-				size:     3,
+				size:     1.5,
 				linetype: LineType(s.Style(v)),
 				color:    BuiltinColors["blue"],
+			}
+		case "color", "fill":
+			key = GrobPoint{
+				x: size / 2, y: y + size/2,
+				size:  6,
+				shape: SolidCirclePoint,
+				color: s.Color(v),
 			}
 		}
 
 		y += size + dy
 		grobs = append(grobs, rect)
 		grobs = append(grobs, key)
-		grobs = append(grobs, label)
-	}
-
-	title := GrobText{
-		x: 0, y: y,
-		text:  s.Name,
-		color: BuiltinColors["black"],
-		vjust: 0, hjust: 0,
-	}
-	tw, th := title.BoundingBox()
-	if width < tw {
-		width = tw
-	}
-	grobs = append(grobs, title)
-
-	width += vg.Length(size + dx)
-	height = vg.Length(y) + th
-
-	return GrobGroup{elements: grobs}, width, height
-}
-
-// renderColorDiscrete renders a discrete color scale
-func (s *Scale) renderColorDiscrete() (g Grob, width vg.Length, height vg.Length) {
-	size := float64(vg.Millimeters(6))
-	dx := float64(vg.Millimeters(2))
-	dy := float64(vg.Millimeters(2))
-
-	grobs := []Grob{}
-
-	y := 0.0
-	for i, v := range s.Breaks {
-		color := s.Color(v)
-		txt := s.Labels[i]
-
-		rect := GrobRect{
-			xmin: 0, xmax: size,
-			ymin: y, ymax: y + size,
-			fill: color,
-		}
-		label := GrobText{
-			x:     size + dx,
-			y:     y + size/2,
-			text:  txt,
-			color: BuiltinColors["black"],
-			vjust: 0.5, hjust: 0,
-		}
-		lw, _ := label.BoundingBox()
-		if width < lw {
-			width = lw
-		}
-
-		y += size + dy
-		grobs = append(grobs, rect)
 		grobs = append(grobs, label)
 	}
 

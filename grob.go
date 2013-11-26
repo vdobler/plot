@@ -139,7 +139,7 @@ var dashLength = [][]vg.Length{
 func (line GrobLine) Draw(vp Viewport) {
 	vp.Canvas.SetColor(line.color)
 	vp.Canvas.SetLineWidth(vg.Points(line.size))
-	vp.Canvas.SetLineDash(dashLength[line.linetype], 0)
+	vp.Canvas.SetLineDash(dashLength[line.linetype%7], 0)
 	x0, y0 := vp.X(line.x0), vp.Y(line.y0)
 	x1, y1 := vp.X(line.x1), vp.Y(line.y1)
 	var p vg.Path

@@ -401,6 +401,7 @@ func TestBoxplot(t *testing.T) {
 		x string
 		y float64
 		t int
+		s string
 	}
 	data := make([]d, 120)
 	for i := 0; i < 20; i++ {
@@ -453,29 +454,29 @@ func TestBoxplot(t *testing.T) {
 	plot.Layers = append(plot.Layers, &box)
 
 	data1 := []d{
-		{"1", 0, 1},
-		{"1", 5, 2},
-		{"1", 10, 3},
-		{"2", 2, 4},
-		{"2", 7, 5},
-		{"2", 12, 6},
-		{"3", 4, 7},
-		{"3", 9, 8},
-		{"3", 14, 9},
+		{"1", 0, 1, "a"},
+		{"1", 5, 2, "b"},
+		{"1", 10, 3, "x"},
+		{"2", 2, 4, "y"},
+		{"2", 7, 5, "a"},
+		{"2", 12, 6, "b"},
+		{"3", 4, 7, "x"},
+		{"3", 9, 8, "y"},
+		{"3", 14, 9, "f"},
 	}
 	df, _ := NewDataFrameFrom(data1, plot.Pool)
 	points := Layer{
 		Name: "Points",
 		Data: df,
 		DataMapping: AesMapping{
-			"x":    "x",
-			"y":    "y",
-			"size": "t",
+			"x":     "x",
+			"y":     "y",
+			"shape": "s",
 		},
 		Geom: GeomPoint{
 			Style: AesMapping{
-				"color": "#369cf1",
-				"shape": "soliddiamond",
+				"color": "#ff00ff",
+				"size":  "10",
 			},
 		},
 	}
