@@ -140,12 +140,6 @@ func (plot *Plot) Compute() {
 		}
 	}
 
-	fmt.Printf("X-Scale\n%s\n%+v\n", plot.Scales["x"].String(), *plot.Scales["x"])
-	fmt.Printf("Y-Scale\n%s\n", plot.Scales["y"].String())
-	if cs, ok := plot.Scales["fill"]; ok {
-		fmt.Printf("Fill-Scale\n%s\n", cs.String())
-	}
-
 	for r := range plot.Panels {
 		for _, panel := range plot.Panels[r] {
 			// Render the fundamental Geoms to Grobs using scales.
@@ -335,10 +329,10 @@ type Fundamental struct {
 // Step 2: Preparing Data and Scales
 
 // PrepareData is the first step in generating a plot.
-// After preparing the data frame the following holds
-//   - Layer has a own data frame (maybe a copy of plots data frame)
+// After preparing the data frame the following holds:
+//   - Layer has a own data frame (maybe a copy of plots data frame).
 //   - This data frame has no unused (aka not mapped to aesthetics)
-//     columns
+//     columns.
 //   - The columns name are the aestectics (e.g. x, y, size, color...)
 //   - The columns have been transformed according to the
 //     ScaleTransform associated with x, y, size, ....
@@ -350,13 +344,12 @@ func (panel *Panel) PrepareData() {
 	fmt.Printf("Panel %q: PrepareData()\n", panel.Name)
 
 	for i, layer := range panel.Layers {
-		fmt.Printf("Layer %d %q: PrepareData()\n", i, layer.Name)
+		fmt.Printf("  Layer %d %q: PrepareData()\n", i, layer.Name)
 		// Step 2a
 
 		// Set up data and aestetics mapping.
 		if layer.Data == nil {
 			layer.Data = layer.Panel.Data.Copy()
-			println("layer has no data, copy from panel", layer.Panel.Name)
 		}
 		aes := MergeAes(layer.DataMapping, layer.Panel.Plot.Aes)
 
@@ -416,7 +409,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 
 	for a := range aes {
 		if !scaleable[a] {
-			fmt.Printf("PrepareScales() %q is un-scalable\n", a)
+			fmt.Printf("    PrepareScales() %q is un-scalable\n", a)
 			continue
 		}
 
@@ -429,15 +422,15 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 		case plotOk && panelOk:
 			// Scale exists and has been distributet to the panels
 			// already.
-			fmt.Printf("PrepareScales() %q already distributed\n", a)
+			fmt.Printf("    PrepareScales() %q already distributed\n", a)
 		case plotOk && !panelOk:
 			// Must be a user set scale on plot; just distribute.
-			fmt.Printf("PrepareScales() %q distributed from plot\n", a)
+			fmt.Printf("    PrepareScales() %q distributed from plot\n", a)
 			plot.distributeScale(plotScale, a)
 		case !plotOk && !panelOk:
 			// Auto-generated scale, first occurence of this scale.
 			name, typ := aes[a], data.Columns[a].Type
-			fmt.Printf("PrepareScales() %q create new and distribute\n", a)
+			fmt.Printf("    PrepareScales() %q create new and distribute\n", a)
 			plotScale = NewScale(a, name, typ)
 			plot.Scales[a] = plotScale
 			plot.distributeScale(plotScale, a)
@@ -455,7 +448,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			} else {
 				field := data.Columns[a]
 				field.Apply(plotScale.Transform.Trans)
-				println("  Transformed data on scale ", a)
+				fmt.Printf("    Transformed data on scale ", a)
 			}
 		}
 
@@ -479,7 +472,6 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 // between rows and columns in which the panels recieve a copy.
 func (plot *Plot) distributeScale(scale *Scale, aes string) {
 	sharing := plot.scaleSharing(aes)
-	println("Scaledist ", aes, "is", sharing)
 	switch sharing {
 	case "all-panels":
 		// All panels share the same scale.
@@ -552,7 +544,7 @@ func (p *Panel) ComputeStatistics() {
 // Step 3 in design.
 func (layer *Layer) ComputeStatistics() {
 	if layer.Stat == nil {
-		fmt.Printf("Layer %q: ComputeStatistics() nil stat\n", layer.Name)
+		fmt.Printf("  Layer %q: ComputeStatistics() nil stat\n", layer.Name)
 		return // The identity statistical transformation.
 	}
 
@@ -612,10 +604,10 @@ func (layer *Layer) ComputeStatistics() {
 	}
 
 	if layer.Data != nil {
-		fmt.Printf("Layer %q: ComputeStatistics() %s --> %d %v\n",
+		fmt.Printf("  Layer %q: ComputeStatistics() %s --> %d %v\n",
 			layer.Name, before, layer.Data.N, layer.Data.FieldNames())
 	} else {
-		fmt.Printf("Layer %q: ComputeStatistics() %s --> nil\n",
+		fmt.Printf("  Layer %q: ComputeStatistics() %s --> nil\n",
 			layer.Name, before)
 	}
 }
@@ -674,12 +666,12 @@ func (layer *Layer) WireStatToGeom() {
 	// These may be mapped to plot aestetics by plot.StatMapping.
 	// Do this now.
 	if len(layer.StatMapping) != 0 {
-		fmt.Printf("Layer %q: Preparing scales with stat mapping %v\n",
+		fmt.Printf("  Layer %q: Preparing scales with stat mapping %v\n",
 			layer.Name, layer.StatMapping)
 
 		// Rename mapped fields to their aestethic name
 		for a, f := range layer.StatMapping {
-			fmt.Printf("Layer %q: Renaming %q to %q because of stat mapping.\n",
+			fmt.Printf("  Layer %q: Renaming %q to %q because of stat mapping.\n",
 				layer.Name, f, a)
 			layer.Data.Rename(f, a)
 		}
@@ -746,7 +738,7 @@ func (layer *Layer) ConstructGeoms() {
 		return
 	}
 
-	fmt.Printf("Layer %q geom %q construction from %d data\n",
+	fmt.Printf("  Layer %q geom %q construction from %d data\n",
 		layer.Name, layer.Geom.Name(), layer.Data.N)
 	layer.Fundamentals = layer.Geom.Construct(layer.Data, layer.Panel)
 }
@@ -866,6 +858,8 @@ func (plot *Plot) RenderGuides() {
 			// X and y axes are draw on a per-panel base.
 			continue
 		}
+
+		fmt.Printf("%s\n", scale.String())
 
 		grobs, width, height := scale.Render()
 		if width > maxWidth {
@@ -1077,9 +1071,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	var titleh vg.Length
 	if _, ok := plot.Grobs["Title"]; ok {
 		titleh = plot.renderInfo["Title.Height"]
-		fmt.Printf("titleh = %.1f mm\n", titleh.Millimeters())
 		titleh += vg.Millimeters(2) // TODO: make configurable
-		fmt.Printf("titleh = %.1f mm\n", titleh.Millimeters())
 	}
 
 	var ylabelw vg.Length
@@ -1143,7 +1135,7 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 			panelId := fmt.Sprintf("Panel-%d,%d", r, c)
 			x := x0 + vg.Length(c)*(pwidth+sepx)
 			y := y0 + vg.Length(r)*(pheight+sepy)
-			fmt.Printf("  %s r=%d c=%d:  x=%.2f  y=%.2f\n", panelId, r, c, x, y)
+			// fmt.Printf("  %s r=%d c=%d:  x=%.2f  y=%.2f\n", panelId, r, c, x, y)
 			plot.Viewports[panelId] = Viewport{
 				Canvas: canvas,
 				X0:     x, Y0: y,

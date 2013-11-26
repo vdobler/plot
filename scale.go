@@ -143,8 +143,8 @@ func (s *Scale) String() string {
 
 // Train updates the domain ranges of s according to the data found in f.
 func (s *Scale) Train(f Field) {
-	fmt.Printf("Training Scale %s/%s with %d %s\n",
-		s.Name, s.Aesthetic, len(f.Data), f.Type.String())
+	fmt.Printf("    Training Scale %s/%q with %d %s\n",
+		s.Aesthetic, s.Name, len(f.Data), f.Type.String())
 	if f.Discrete() {
 		s.DomainLevels.Join(f.Levels())
 		levels := s.DomainLevels.Elements()
@@ -156,12 +156,12 @@ func (s *Scale) Train(f Field) {
 				s.DomainMax = levels[n-1]
 			}
 		}
-		fmt.Printf("  data is discrete and has %d levels\n", len(f.Levels()))
+		fmt.Printf("      data is discrete and has %d levels\n", len(f.Levels()))
 	} else {
 		// Continous data.
 		// TODO: this might train a discrete scale...
 		min, max, mini, maxi := f.MinMax()
-		fmt.Printf("  data is continuous from %.2f to %.2f\n",
+		fmt.Printf("      data is continuous from %.2f to %.2f\n",
 			min, max)
 		if mini != -1 {
 			if min < s.DomainMin {
@@ -174,7 +174,7 @@ func (s *Scale) Train(f Field) {
 			}
 		}
 	}
-	fmt.Printf("  --> Domain [%.2f,%.2f] , %d levels\n",
+	fmt.Printf("      --> Domain [%.2f,%.2f] , %d levels\n",
 		s.DomainMin, s.DomainMax, len(s.DomainLevels))
 }
 
@@ -232,7 +232,7 @@ func discreteToCont(x float64, levels []float64) float64 {
 
 // FinalizeDiscrete
 func (s *Scale) FinalizeDiscrete(pool *StringPool) {
-	fmt.Printf("Finalizing discrete scale %q %p\n%+v\n", s.Name, s, *s)
+	fmt.Printf("  Finalizing discrete scale %q %p\n    = %+v\n", s.Name, s, *s)
 	// TODO: Manual setting the values.
 
 	// Position the n levels on 1, 2, ..., n but consider the
@@ -338,7 +338,7 @@ func (s *Scale) FinalizeDiscrete(pool *StringPool) {
 // FinalizeContinous sets up the fields Breaks, Labels and the
 // functions from Domain to [0,1] (x,y,time, etc), color or int.
 func (s *Scale) FinalizeContinous() {
-	fmt.Printf("Finalizing continuos scale %q %p\n", s.Name, s)
+	fmt.Printf("  Finalizing continuos scale %q %p\n", s.Name, s)
 	s.Min, s.Max = s.DomainMin, s.DomainMax
 	if s.FixMin != s.FixMax {
 		s.Min, s.Max = s.FixMin, s.FixMax
@@ -451,12 +451,12 @@ func (s *Scale) PrepareContinousBreaks(min, max float64, num int) {
 		x += step
 	}
 
-	fmt.Printf("PrepareContinousBreaks(%.2f, %.2f, %d)\n  delta = %.3f  mag  = %.3f   f    = %.3f\n  step = %.3f  x0  =  %.3f   n=%d\n", min, max, num, delta, mag, f, step, math.Ceil(min/step)*step, len(s.Breaks))
+	fmt.Printf("    PrepareContinousBreaks(%.2f, %.2f, %d) delta=%.3f mag=%.3f f=%.3f step=%.3f x0=%.3f n=%d\n", min, max, num, delta, mag, f, step, math.Ceil(min/step)*step, len(s.Breaks))
 }
 
 // PrepareLabels sets up s.Labels (if empty) by formating s.Breaks.
 func (s *Scale) PrepareLabels() {
-	println("PrepareLabels with ", len(s.Breaks))
+	fmt.Printf("    PrepareLabels from %d breaks\n", len(s.Breaks))
 	if len(s.Breaks) == 0 {
 		return
 	}
