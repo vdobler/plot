@@ -101,10 +101,8 @@ func (p GeomPoint) Render(panel *Panel, data *DataFrame, style AesMapping) []Gro
 	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
 	colFunc := makeColorFunc("color", data, panel, style)
-	// TODO: allow fill also
-
-	sizeFunc := makePosFunc("size", data, panel, style)
-	alphaFunc := makePosFunc("alpha", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style, 1, 10)
+	alphaFunc := makePosFunc("alpha", data, panel, style, 0, 1)
 	shapeFunc := makeStyleFunc("shape", data, panel, style)
 
 	for i := 0; i < data.N; i++ {
@@ -167,8 +165,8 @@ func (p GeomLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 	for _, part := range partitions {
 		x, y := part.Columns["x"], part.Columns["y"]
 		colFunc := makeColorFunc("color", part, panel, style)
-		sizeFunc := makePosFunc("size", part, panel, style)
-		alphaFunc := makePosFunc("alpha", part, panel, style)
+		sizeFunc := makePosFunc("size", part, panel, style, 0, 1)
+		alphaFunc := makePosFunc("alpha", part, panel, style, 0, 1)
 		typeFunc := makeStyleFunc("linetype", part, panel, style)
 		if part.Has("color") || part.Has("size") ||
 			part.Has("alpha") || part.Has("linetype") {
@@ -250,8 +248,8 @@ func (p GeomABLine) Render(panel *Panel, data *DataFrame, style AesMapping) []Gr
 	ic, sc := data.Columns["intercept"].Data, data.Columns["slope"].Data
 	grobs := make([]Grob, data.N)
 	colFunc := makeColorFunc("color", data, panel, style)
-	sizeFunc := makePosFunc("size", data, panel, style)
-	alphaFunc := makePosFunc("alpha", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style, 0, 1)
+	alphaFunc := makePosFunc("alpha", data, panel, style, 0, 1)
 	typeFunc := makeStyleFunc("linetype", data, panel, style)
 
 	scaleX, scaleY := panel.Scales["x"], panel.Scales["y"]
@@ -312,9 +310,9 @@ func (t GeomText) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 	xf, yf := panel.Scales["x"].Pos, panel.Scales["y"].Pos
 
 	colFunc := makeColorFunc("color", data, panel, style)
-	sizeFunc := makePosFunc("size", data, panel, style)
-	alphaFunc := makePosFunc("alpha", data, panel, style)
-	angleFunc := makePosFunc("angle", data, panel, style)
+	sizeFunc := makePosFunc("size", data, panel, style, 0, 1)
+	alphaFunc := makePosFunc("alpha", data, panel, style, 0, 1)
+	angleFunc := makePosFunc("angle", data, panel, style, 0, 1)
 
 	grobs := make([]Grob, data.N)
 	for i := 0; i < data.N; i++ {
@@ -488,8 +486,8 @@ func (r GeomRect) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 	colFunc := makeColorFunc("color", data, panel, style)
 	fillFunc := makeColorFunc("fill", data, panel, style)
 	linetypeFunc := makeStyleFunc("linetype", data, panel, style)
-	alphaFunc := makePosFunc("alpha", data, panel, style)
-	sizeFunc := makePosFunc("size", data, panel, style)
+	alphaFunc := makePosFunc("alpha", data, panel, style, 0, 1)
+	sizeFunc := makePosFunc("size", data, panel, style, 0, 1)
 
 	grobs := make([]Grob, 0)
 	for i := 0; i < data.N; i++ {

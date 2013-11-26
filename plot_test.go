@@ -468,9 +468,9 @@ func TestBoxplot(t *testing.T) {
 		Name: "Points",
 		Data: df,
 		DataMapping: AesMapping{
-			"x":     "x",
-			"y":     "y",
-			"shape": "t",
+			"x":    "x",
+			"y":    "y",
+			"size": "t",
 		},
 		Geom: GeomPoint{},
 	}

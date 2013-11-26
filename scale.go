@@ -544,7 +544,7 @@ func (s *Scale) Render() (grobs Grob, width vg.Length, height vg.Length) {
 // renderOther renders all non-color scales.
 // TODO: combine with renderColorDiscrete
 func (s *Scale) renderOther() (g Grob, width vg.Length, height vg.Length) {
-	size := float64(vg.Millimeters(5))
+	size := float64(vg.Millimeters(6))
 	dx := float64(vg.Millimeters(2))
 	dy := float64(vg.Millimeters(2))
 
@@ -578,7 +578,7 @@ func (s *Scale) renderOther() (g Grob, width vg.Length, height vg.Length) {
 		case "size":
 			key = GrobPoint{
 				x: size / 2, y: y + size/2,
-				size:  s.Pos(v),
+				size:  1 + 9*s.Pos(v), // must match values in GeomPoint!
 				shape: SolidCirclePoint,
 				color: BuiltinColors["blue"],
 			}
@@ -624,7 +624,7 @@ func (s *Scale) renderOther() (g Grob, width vg.Length, height vg.Length) {
 
 // renderColorDiscrete renders a discrete color scale
 func (s *Scale) renderColorDiscrete() (g Grob, width vg.Length, height vg.Length) {
-	size := float64(vg.Millimeters(5))
+	size := float64(vg.Millimeters(6))
 	dx := float64(vg.Millimeters(2))
 	dy := float64(vg.Millimeters(2))
 

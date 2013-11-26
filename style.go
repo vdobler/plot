@@ -202,8 +202,8 @@ func Color2String(c color.Color) string {
 // -------------------------------------------------------------------------
 // Accessor functions
 
-// Return a function which maps row number in df to a color.
-// The color is produced by the appropriate scale of plot
+// Return a function which maps row number i in data to a color.
+// The color is produced by the appropriate scale of the panel
 // or a fixed value defined in aes.
 func makeColorFunc(aes string, data *DataFrame, panel *Panel, style AesMapping) func(i int) color.Color {
 	var f func(i int) color.Color
@@ -221,12 +221,17 @@ func makeColorFunc(aes string, data *DataFrame, panel *Panel, style AesMapping) 
 	return f
 }
 
-func makePosFunc(aes string, data *DataFrame, panel *Panel, style AesMapping) func(i int) float64 {
+// Return a function which maps row number i in data to continuous float.
+// If data contains aes the value returned is in the range [min,max] and
+// the appropriate scale of panel is used to map from data to [min,max];
+// otherwise the value is directly taken from style.
+func makePosFunc(aes string, data *DataFrame, panel *Panel, style AesMapping, min, max float64) func(i int) float64 {
 	var f func(i int) float64
 	if data.Has(aes) {
 		d := data.Columns[aes].Data
 		f = func(i int) float64 {
-			return panel.Scales[aes].Pos(d[i])
+			orig := panel.Scales[aes].Pos(d[i])
+			return orig*(max-min) + min
 		}
 	} else {
 		x := String2Float(style[aes], math.Inf(-1), math.Inf(+1))
