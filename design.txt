@@ -395,3 +395,16 @@ Original DF with fields:
   - Age
   - Occasion
 
+
+Discrete Scales mapped to shape and linetype
+--------------------------------------------
+ggplot2 limits number of shapes and linetypes to a handful (otherwise the plot
+becomes to complicated and unreadable). This behaviour is okay for an
+interactive tool but might be frustating in code.
+But even if we do not clip the number of shapes or linestyles there is just
+a limited number: What to do if we run out of shapes? Wrap around? Most
+probably not as this is ambiguous. Add color if available?
+
+
+
+
