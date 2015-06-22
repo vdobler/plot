@@ -12,10 +12,10 @@ type Box struct {
 
 func (b Box) Render(data plot.DataFrame, aes plot.AesMapping, p plot.Plot) {
 	am := p.Aes.Merge(aes, plot.DefaultTheme.BoxAes)
-	for i := 0; i<plot.Length(data); i++ {
-		x := plot.Field(data,aes.X)
-		lower := plot.Field(data,aes.Lower)
-		upper := plot.Field(data,aes.Upper)
+	for i := 0; i < plot.Length(data); i++ {
+		x := plot.Field(data, aes.X)
+		lower := plot.Field(data, aes.Lower)
+		upper := plot.Field(data, aes.Upper)
 
 		w := b.Width
 

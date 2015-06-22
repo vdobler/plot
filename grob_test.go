@@ -1,12 +1,13 @@
 package plot
 
 import (
-	"code.google.com/p/plotinum/vg"
-	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"math"
 	"os"
 	"testing"
+
+	"github.com/gonum/plot/vg"
+	"github.com/gonum/plot/vg/vgimg"
 )
 
 func TestGraphicGrobs(t *testing.T) {
@@ -16,14 +17,14 @@ func TestGraphicGrobs(t *testing.T) {
 		t.Fatalf("%", err)
 	}
 
-	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(vg.Inches(10), vg.Inches(8))}
+	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(10*vg.Inch, 8*vg.Inch)}
 	vg.Initialize(pngCanvas)
 
 	allVP := Viewport{
 		X0:     0,
 		Y0:     0,
-		Width:  vg.Inches(10),
-		Height: vg.Inches(8),
+		Width:  10 * vg.Inch,
+		Height: 8 * vg.Inch,
 		Canvas: pngCanvas,
 	}
 	innerVP := allVP.Sub(0.05, 0.05, 0.9, 0.9)
@@ -217,14 +218,14 @@ func TestTextGrobs(t *testing.T) {
 		t.Fatalf("%", err)
 	}
 
-	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(vg.Inches(10), vg.Inches(8))}
+	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(10*vg.Inch, 8*vg.Inch)}
 	vg.Initialize(pngCanvas)
 
 	allVP := Viewport{
 		X0:     0,
 		Y0:     0,
-		Width:  vg.Inches(10),
-		Height: vg.Inches(8),
+		Width:  10 * vg.Inch,
+		Height: 8 * vg.Inch,
 		Canvas: pngCanvas,
 	}
 	bg := GrobRect{xmin: 0, ymin: 0, xmax: 1, ymax: 1, fill: BuiltinColors["gray60"]}

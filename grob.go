@@ -1,11 +1,12 @@
 package plot
 
 import (
-	"code.google.com/p/plotinum/vg"
 	"fmt"
 	"image/color"
 	"math"
 	"strings"
+
+	"github.com/gonum/plot/vg"
 )
 
 type Grob interface {
@@ -43,7 +44,7 @@ func (point GrobPoint) Draw(vp Viewport) {
 		return
 	case DotPoint:
 		dpi := vp.Canvas.DPI()
-		p.Arc(x, y, vg.Inches(1/dpi), 0, 2*math.Pi)
+		p.Arc(x, y, vg.Inch/vg.Length(dpi), 0, 2*math.Pi)
 		p.Close()
 		vp.Canvas.Fill(p)
 	case CirclePoint, SolidCirclePoint:
@@ -357,8 +358,8 @@ type Viewport struct {
 }
 
 func (vp Viewport) String() string {
-	return fmt.Sprintf("%.2f x %.2f + %.2f + %.2f (inches)",
-		vp.X0.Inches(), vp.Y0.Inches(), vp.Width.Inches(), vp.Height.Inches())
+	return fmt.Sprintf("%.2f x %.2f + %.2f + %.2f (PS points)",
+		vp.X0.Points(), vp.Y0.Points(), vp.Width.Points(), vp.Height.Points())
 }
 
 // SubViewport returns the area described by x0,y0,width,height in

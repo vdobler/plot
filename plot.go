@@ -1,8 +1,6 @@
 package plot
 
 import (
-	"code.google.com/p/plotinum/vg"
-	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
 	"math"
@@ -10,6 +8,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/gonum/plot/vg"
+	"github.com/gonum/plot/vg/vgimg"
 )
 
 var now = time.Now
@@ -1071,22 +1072,22 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	var titleh vg.Length
 	if _, ok := plot.Grobs["Title"]; ok {
 		titleh = plot.renderInfo["Title.Height"]
-		titleh += vg.Millimeters(2) // TODO: make configurable
+		titleh += 2 * vg.Millimeter // TODO: make configurable
 	}
 
 	var ylabelw vg.Length
 	if _, ok := plot.Grobs["Y-Label"]; ok {
 		ylabelw = plot.renderInfo["Y-Label.Width"]
-		ylabelw += vg.Millimeters(2) // TODO: make configurable
+		ylabelw += 2 * vg.Millimeter // TODO: make configurable
 	}
 
 	var xlabelh vg.Length
 	if _, ok := plot.Grobs["X-Label"]; ok {
 		xlabelh = plot.renderInfo["X-Label.Height"]
-		xlabelh += vg.Millimeters(2) // TODO: make configurable
+		xlabelh += 2 * vg.Millimeter // TODO: make configurable
 	}
 
-	guidesSep := vg.Millimeters(2) // TODO: make configurable
+	guidesSep := 2 * vg.Millimeter // TODO: make configurable
 	guidesw := plot.renderInfo["Guides.Width"] + 2*guidesSep
 
 	plot.Viewports["Title"] = Viewport{
@@ -1116,11 +1117,11 @@ func (plot *Plot) Layout(canvas vg.Canvas, width, height vg.Length) {
 	var xticsh, yticsw vg.Length
 	var collabh, rowlabw vg.Length
 	yticsw, xticsh = plot.ticsExtents()
-	collabh = plot.renderInfo["Col-Strip.Height"] + vg.Millimeters(2) // TODO: make configurabel
-	rowlabw = plot.renderInfo["Row-Strip.Width"] + vg.Millimeters(2)  // TODO: make configurabel
+	collabh = plot.renderInfo["Col-Strip.Height"] + 2*vg.Millimeter // TODO: make configurabel
+	rowlabw = plot.renderInfo["Row-Strip.Width"] + 2*vg.Millimeter  // TODO: make configurabel
 
-	sepx := vg.Millimeters(2) // TODO: make configurabel
-	sepy := vg.Millimeters(2) // TODO: make configurabel
+	sepx := 2 * vg.Millimeter // TODO: make configurabel
+	sepy := 2 * vg.Millimeter // TODO: make configurabel
 	nrows := len(plot.Panels)
 	ncols := len(plot.Panels[0])
 	tw := width - ylabelw - guidesw - yticsw - rowlabw

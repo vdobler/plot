@@ -407,4 +407,11 @@ probably not as this is ambiguous. Add color if available?
 
 
 
+Themes
+------
+Styling of plots is done by specifiying various properties of individual
+plot elements.  The plot elements are grouped hierarchically and settings
+are inherited from above (a bit like CSS).
+
+
 

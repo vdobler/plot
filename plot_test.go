@@ -1,13 +1,14 @@
 package plot
 
 import (
-	"code.google.com/p/plotinum/vg/vgimg"
 	"fmt"
 	"image/color"
 	"math"
 	"math/rand"
 	"os"
 	"testing"
+
+	"github.com/gonum/plot/vg/vgimg"
 )
 
 func same(s []string, t []string) bool {

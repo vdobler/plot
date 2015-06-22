@@ -1,12 +1,13 @@
 package plot
 
 import (
-	"code.google.com/p/plotinum/vg"
 	"fmt"
 	"image/color"
 	"math"
 	"sort"
 	"time"
+
+	"github.com/gonum/plot/vg"
 )
 
 // Scale provides position scales like x- and y-axis as well as color
@@ -539,9 +540,9 @@ func (s *Scale) Render() (grobs Grob, width vg.Length, height vg.Length) {
 // renderOther renders all non-color scales.
 // TODO: combine with renderColorDiscrete
 func (s *Scale) renderDiscrete() (g Grob, width vg.Length, height vg.Length) {
-	size := float64(vg.Millimeters(6))
-	dx := float64(vg.Millimeters(2))
-	dy := float64(vg.Millimeters(2))
+	size := float64(6 * vg.Millimeter)
+	dx := float64(2 * vg.Millimeter)
+	dy := float64(2 * vg.Millimeter)
 
 	grobs := []Grob{}
 	bgCol := BuiltinColors["gray80"]
@@ -626,10 +627,10 @@ func (s *Scale) renderDiscrete() (g Grob, width vg.Length, height vg.Length) {
 
 // renders a continuous color scale
 func (s *Scale) renderColorContinuous() (g Grob, width vg.Length, height vg.Length) {
-	sizeX := float64(vg.Millimeters(6))
-	sizeY := float64(vg.Millimeters(50))
-	sep := float64(vg.Millimeters(2))
-	tic := float64(vg.Millimeters(1.5))
+	sizeX := float64(6 * vg.Millimeter)
+	sizeY := float64(50 * vg.Millimeter)
+	sep := float64(2 * vg.Millimeter)
+	tic := float64(1.5 * vg.Millimeter)
 
 	grobs := []Grob{}
 
@@ -675,7 +676,7 @@ func (s *Scale) renderColorContinuous() (g Grob, width vg.Length, height vg.Leng
 				y:     y,
 				text:  txt,
 				color: BuiltinColors["black"],
-				size:  12,         // TODO: make configurable
+				size:  12, // TODO: make configurable
 				vjust: 0.5, hjust: 0,
 			}
 			lw, _ := label.BoundingBox()
