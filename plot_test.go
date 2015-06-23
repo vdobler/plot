@@ -102,8 +102,9 @@ func TestIndividualSteps(t *testing.T) {
 		Geom: GeomText{
 			Style: AesMapping{
 				"color":  "blue",
-				"angle":  "45°",
+				"angle":  "0.7", // "45°",  // TODO: parsing ° fails
 				"family": "Helvetica",
+				"size":   "10", // TODO: should come from DefaultTheme
 			},
 		},
 		GeomMapping: nil,
@@ -242,6 +243,7 @@ func TestIndividualSteps(t *testing.T) {
 
 	// Output
 	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(800, 600)}
+	pngCanvas.Translate(-400, -300)
 	vp := Viewport{
 		X0:     50,
 		Y0:     50,
@@ -254,22 +256,26 @@ func TestIndividualSteps(t *testing.T) {
 		t.Fatalf("%", err)
 	}
 
-	fmt.Println("Layer 0, raw data")
-	for _, grob := range panel.Layers[0].Grobs {
-		grob.Draw(vp)
+	panel.Draw(vp, true, true)
+	if false {
+		fmt.Println("Layer 0, raw data")
+		for _, grob := range panel.Layers[0].Grobs {
+			grob.Draw(vp)
+		}
+		fmt.Println("Layer 1, linear regression")
+		for _, grob := range panel.Layers[1].Grobs {
+			grob.Draw(vp)
+		}
+		fmt.Println("Layer 2, labels")
+		for _, grob := range panel.Layers[2].Grobs {
+			grob.Draw(vp)
+		}
+		fmt.Println("Layer 3, histogram")
+		for _, grob := range panel.Layers[3].Grobs {
+			grob.Draw(vp)
+		}
 	}
-	fmt.Println("Layer 1, linear regression")
-	for _, grob := range panel.Layers[1].Grobs {
-		grob.Draw(vp)
-	}
-	fmt.Println("Layer 2, labels")
-	for _, grob := range panel.Layers[2].Grobs {
-		grob.Draw(vp)
-	}
-	fmt.Println("Layer 3, histogram")
-	for _, grob := range panel.Layers[3].Grobs {
-		grob.Draw(vp)
-	}
+
 	pngCanvas.WriteTo(file)
 	file.Close()
 

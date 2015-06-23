@@ -295,11 +295,13 @@ type GrobRect struct {
 var _ Grob = GrobRect{}
 
 func (rect GrobRect) Draw(vp Viewport) {
+	println("GrobRect.Draw: ", rect.String(), " to ", vp.String())
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(rect.fill)
 	vp.Canvas.SetLineWidth(2)
 	xmin, ymin := vp.X(rect.xmin), vp.Y(rect.ymin)
 	xmax, ymax := vp.X(rect.xmax), vp.Y(rect.ymax)
+	println(xmin, ymin, " -- ", xmax, ymax)
 	var p vg.Path
 
 	p.Move(xmin, ymin)

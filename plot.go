@@ -195,6 +195,7 @@ func (p *Plot) WritePNG(filename string, width, height vg.Length) error {
 	defer file.Close()
 
 	canvas := vgimg.PngCanvas{Canvas: vgimg.New(width, height)}
+	canvas.Translate(-width/2, -height/2)
 	p.DumpTo(canvas, width, height)
 	canvas.WriteTo(file)
 	return nil

@@ -326,6 +326,7 @@ func (t GeomText) Render(panel *Panel, data *DataFrame, style AesMapping) []Grob
 			size:  sizeFunc(i),
 			angle: angleFunc(i),
 		}
+		println("GrobText with size", sizeFunc(i))
 		grobs[i] = grob
 	}
 	return grobs

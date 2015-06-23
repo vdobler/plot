@@ -19,6 +19,26 @@ func TestGraphicGrobs(t *testing.T) {
 
 	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(10*vg.Inch, 8*vg.Inch)}
 	vg.Initialize(pngCanvas)
+	pngCanvas.Translate(-5*vg.Inch, -4*vg.Inch)
+	dot := func(x, y float64) {
+		pngCanvas.Push()
+		pngCanvas.SetColor(BuiltinColors["red"])
+		pngCanvas.SetLineWidth(5)
+		var p vg.Path
+		xr := vg.Length(x) * vg.Inch
+		yr := vg.Length(y) * vg.Inch
+		p.Move(xr-5, yr-5)
+		p.Line(xr-5, yr+5)
+		p.Line(xr+5, yr+5)
+		p.Line(xr+5, yr-5)
+		p.Close()
+		pngCanvas.Fill(p)
+		pngCanvas.Pop()
+	}
+
+	dot(0, 0)
+	dot(5, 0)
+	dot(0, 4)
 
 	allVP := Viewport{
 		X0:     0,
