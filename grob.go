@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gonum/plot/vg"
+	"gonum.org/v1/plot/vg"
 )
 
 type Grob interface {
@@ -30,6 +30,7 @@ func (point GrobPoint) Draw(vp Viewport) {
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(point.color)
 	vp.Canvas.SetLineWidth(1)
+	vp.Canvas.SetLineDash(nil, 0)
 	x, y := vp.X(point.x), vp.Y(point.y)
 	s := vg.Points(point.size)
 	var p vg.Path
@@ -43,65 +44,65 @@ func (point GrobPoint) Draw(vp Viewport) {
 	case BlankPoint:
 		return
 	case DotPoint:
-		dpi := vp.Canvas.DPI()
-		p.Arc(x, y, vg.Inch/vg.Length(dpi), 0, 2*math.Pi)
+		// dpi := vp.Canvas.DPI()
+		p.Arc(vg.Point{x, y}, 1, 0, 2*math.Pi)
 		p.Close()
 		vp.Canvas.Fill(p)
 	case CirclePoint, SolidCirclePoint:
-		p.Arc(x, y, vg.Points(point.size), 0, 2*math.Pi)
+		p.Arc(vg.Point{x, y}, vg.Points(point.size), 0, 2*math.Pi)
 		p.Close()
 		draw(p)
 	case SquarePoint, SolidSquarePoint:
-		p.Move(x-s, y-s)
-		p.Line(x+s, y-s)
-		p.Line(x+s, y+s)
-		p.Line(x-s, y+s)
+		p.Move(vg.Point{x - s, y - s})
+		p.Line(vg.Point{x + s, y - s})
+		p.Line(vg.Point{x + s, y + s})
+		p.Line(vg.Point{x - s, y + s})
 		p.Close()
 		draw(p)
 	case DiamondPoint, SolidDiamondPoint:
-		p.Move(x, y-s)
-		p.Line(x+s, y)
-		p.Line(x, y+s)
-		p.Line(x-s, y)
+		p.Move(vg.Point{x, y - s})
+		p.Line(vg.Point{x + s, y})
+		p.Line(vg.Point{x, y + s})
+		p.Line(vg.Point{x - s, y})
 		p.Close()
 		draw(p)
 	case DeltaPoint, SolidDeltaPoint:
 		ss := 0.57735 * s
-		p.Move(x, y+2*ss)
-		p.Line(x-s, y-ss)
-		p.Line(x+s, y-ss)
+		p.Move(vg.Point{x, y + 2*ss})
+		p.Line(vg.Point{x - s, y - ss})
+		p.Line(vg.Point{x + s, y - ss})
 		p.Close()
 		draw(p)
 	case NablaPoint, SolidNablaPoint:
 		ss := 0.57735 * s
-		p.Move(x, y-2*ss)
-		p.Line(x-s, y+ss)
-		p.Line(x+s, y+ss)
+		p.Move(vg.Point{x, y - 2*ss})
+		p.Line(vg.Point{x - s, y + ss})
+		p.Line(vg.Point{x + s, y + ss})
 		p.Close()
 		draw(p)
 	case CrossPoint:
 		ss := s / 1.3
-		p.Move(x-ss, y-ss)
-		p.Line(x+ss, y+ss)
-		p.Move(x-ss, y+ss)
-		p.Line(x+ss, y-ss)
+		p.Move(vg.Point{x - ss, y - ss})
+		p.Line(vg.Point{x + ss, y + ss})
+		p.Move(vg.Point{x - ss, y + ss})
+		p.Line(vg.Point{x + ss, y - ss})
 		draw(p)
 	case PlusPoint:
-		p.Move(x-s, y)
-		p.Line(x+s, y)
-		p.Move(x, y-s)
-		p.Line(x, y+s)
+		p.Move(vg.Point{x - s, y})
+		p.Line(vg.Point{x + s, y})
+		p.Move(vg.Point{x, y - s})
+		p.Line(vg.Point{x, y + s})
 		draw(p)
 	case StarPoint:
 		ss := s / 1.3
-		p.Move(x-ss, y-ss)
-		p.Line(x+ss, y+ss)
-		p.Move(x-ss, y+ss)
-		p.Line(x+ss, y-ss)
-		p.Move(x-s, y)
-		p.Line(x+s, y)
-		p.Move(x, y-s)
-		p.Line(x, y+s)
+		p.Move(vg.Point{x - ss, y - ss})
+		p.Line(vg.Point{x + ss, y + ss})
+		p.Move(vg.Point{x - ss, y + ss})
+		p.Line(vg.Point{x + ss, y - ss})
+		p.Move(vg.Point{x - s, y})
+		p.Line(vg.Point{x + s, y})
+		p.Move(vg.Point{x, y - s})
+		p.Line(vg.Point{x, y + s})
 		draw(p)
 	default:
 		println("Implement Draw for points " + point.shape.String())
@@ -128,7 +129,8 @@ type GrobLine struct {
 var _ Grob = GrobLine{}
 
 var dashLength = [][]vg.Length{
-	[]vg.Length{1},
+	[]vg.Length{},
+	[]vg.Length{},
 	[]vg.Length{10},
 	[]vg.Length{10, 8},
 	[]vg.Length{4, 4},
@@ -141,12 +143,13 @@ func (line GrobLine) Draw(vp Viewport) {
 	vp.Canvas.SetColor(line.color)
 	vp.Canvas.SetLineWidth(vg.Points(line.size))
 	vp.Canvas.SetLineDash(dashLength[line.linetype%7], 0)
+	fmt.Println("%%%%%%%%%%%%", line.linetype, line.linetype%7, dashLength[line.linetype%7])
 	x0, y0 := vp.X(line.x0), vp.Y(line.y0)
 	x1, y1 := vp.X(line.x1), vp.Y(line.y1)
 	var p vg.Path
 
-	p.Move(x0, y0)
-	p.Line(x1, y1)
+	p.Move(vg.Point{x0, y0})
+	p.Line(vg.Point{x1, y1})
 	vp.Canvas.Stroke(p)
 }
 
@@ -177,10 +180,10 @@ func (path GrobPath) Draw(vp Viewport) {
 	x, y := vp.X(path.points[0].x), vp.Y(path.points[0].y)
 	var p vg.Path
 
-	p.Move(x, y)
+	p.Move(vg.Point{x, y})
 	for i := 1; i < len(path.points); i++ {
 		x, y = vp.X(path.points[i].x), vp.Y(path.points[i].y)
-		p.Line(x, y)
+		p.Line(vg.Point{x, y})
 	}
 	vp.Canvas.Stroke(p)
 	vp.Canvas.Pop()
@@ -253,9 +256,9 @@ func (text GrobText) Draw(vp Viewport) {
 	} else {
 		panic("Implement me....")
 	}
-	vp.Canvas.Translate(x-dx, y-dy)
+	vp.Canvas.Translate(vg.Point{x - dx, y - dy})
 	vp.Canvas.Rotate(text.angle)
-	vp.Canvas.FillString(font, 0, 0, text.text)
+	vp.Canvas.FillString(font, vg.Point{0, 0}, text.text)
 	// fmt.Printf("Printed %s %.1f %.1f\n", text.String(), ww, hh)
 	vp.Canvas.Pop()
 
@@ -299,15 +302,16 @@ func (rect GrobRect) Draw(vp Viewport) {
 	vp.Canvas.Push()
 	vp.Canvas.SetColor(rect.fill)
 	vp.Canvas.SetLineWidth(2)
+	vp.Canvas.SetLineDash(nil, 0)
 	xmin, ymin := vp.X(rect.xmin), vp.Y(rect.ymin)
 	xmax, ymax := vp.X(rect.xmax), vp.Y(rect.ymax)
 	println(xmin, ymin, " -- ", xmax, ymax)
 	var p vg.Path
 
-	p.Move(xmin, ymin)
-	p.Line(xmax, ymin)
-	p.Line(xmax, ymax)
-	p.Line(xmin, ymax)
+	p.Move(vg.Point{xmin, ymin})
+	p.Line(vg.Point{xmax, ymin})
+	p.Line(vg.Point{xmax, ymax})
+	p.Line(vg.Point{xmin, ymax})
 	p.Close()
 	vp.Canvas.Fill(p)
 	vp.Canvas.Pop()
@@ -333,7 +337,7 @@ func (group GrobGroup) Draw(vp Viewport) {
 	// x0, y0 := vp.X(group.x0), vp.Y(group.y0)
 	// fmt.Printf("Guides translate %.1f %.1f\n", x0,y0)
 	vp.Canvas.Push()
-	vp.Canvas.Translate(vg.Length(group.x0), vg.Length(group.y0))
+	vp.Canvas.Translate(vg.Point{vg.Length(group.x0), vg.Length(group.y0)})
 	for _, g := range group.elements {
 		g.Draw(vp)
 	}

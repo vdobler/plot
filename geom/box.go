@@ -1,8 +1,9 @@
 package geom
 
 import (
-	"github.com/vdobler/plot"
 	"image/color"
+
+	"github.com/vdobler/plot"
 )
 
 type Box struct {
@@ -10,20 +11,20 @@ type Box struct {
 	Color color.Color
 }
 
-func (b Box) Render(data plot.DataFrame, aes plot.AesMapping, p plot.Plot) {
-	am := p.Aes.Merge(aes, plot.DefaultTheme.BoxAes)
+func (b Box) Render(data plot.DataFrame, aes plot.AesMapping, pt plot.Plot) {
+	am := plot.MergeAes(aes, plot.DefaultTheme.BoxAes)
 	for i := 0; i < plot.Length(data); i++ {
-		x := plot.Field(data, aes.X)
-		lower := plot.Field(data, aes.Lower)
-		upper := plot.Field(data, aes.Upper)
+		x := pt.Field(data, aes.X)
+		lower := pt.Field(data, aes.Lower)
+		upper := pt.Field(data, aes.Upper)
 
 		w := b.Width
 
-		var fill color.Colour
+		var fill color.Color
 		if plot.FixedAes(am.Fill) {
 			fill = am.FixedColor(am.Fill)
 		} else {
-			fill = plot.Field(data, am.Fill)
+			fill = pt.Field(data, am.Fill)
 		}
 
 		// now draw a rectangle from

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gonum/plot/vg/vgimg"
+	"gonum.org/v1/plot/vg/vgimg"
 )
 
 func same(s []string, t []string) bool {
@@ -243,7 +243,7 @@ func TestIndividualSteps(t *testing.T) {
 
 	// Output
 	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(800, 600)}
-	pngCanvas.Translate(-400, -300)
+	// pngCanvas.Translate(vg.Point{-400, -300})
 	vp := Viewport{
 		X0:     50,
 		Y0:     50,
@@ -253,7 +253,7 @@ func TestIndividualSteps(t *testing.T) {
 	}
 	file, err := os.Create("example.png")
 	if err != nil {
-		t.Fatalf("%", err)
+		t.Fatalf("%s", err)
 	}
 
 	panel.Draw(vp, true, true)

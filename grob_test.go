@@ -6,20 +6,20 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gonum/plot/vg"
-	"github.com/gonum/plot/vg/vgimg"
+	"gonum.org/v1/plot/vg"
+	"gonum.org/v1/plot/vg/vgimg"
 )
 
 func TestGraphicGrobs(t *testing.T) {
 	// Output
 	file, err := os.Create("grobs.png")
 	if err != nil {
-		t.Fatalf("%", err)
+		t.Fatalf("%s", err)
 	}
 
 	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(10*vg.Inch, 8*vg.Inch)}
 	vg.Initialize(pngCanvas)
-	pngCanvas.Translate(-5*vg.Inch, -4*vg.Inch)
+	// pngCanvas.Translate(vg.Point{-5 * vg.Inch, -4 * vg.Inch})
 	dot := func(x, y float64) {
 		pngCanvas.Push()
 		pngCanvas.SetColor(BuiltinColors["red"])
@@ -27,10 +27,10 @@ func TestGraphicGrobs(t *testing.T) {
 		var p vg.Path
 		xr := vg.Length(x) * vg.Inch
 		yr := vg.Length(y) * vg.Inch
-		p.Move(xr-5, yr-5)
-		p.Line(xr-5, yr+5)
-		p.Line(xr+5, yr+5)
-		p.Line(xr+5, yr-5)
+		p.Move(vg.Point{xr - 5, yr - 5})
+		p.Line(vg.Point{xr - 5, yr + 5})
+		p.Line(vg.Point{xr + 5, yr + 5})
+		p.Line(vg.Point{xr + 5, yr - 5})
 		p.Close()
 		pngCanvas.Fill(p)
 		pngCanvas.Pop()
@@ -235,7 +235,7 @@ func TestTextGrobs(t *testing.T) {
 	// Output
 	file, err := os.Create("text.png")
 	if err != nil {
-		t.Fatalf("%", err)
+		t.Fatalf("%s", err)
 	}
 
 	pngCanvas := vgimg.PngCanvas{Canvas: vgimg.New(10*vg.Inch, 8*vg.Inch)}

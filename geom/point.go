@@ -1,8 +1,9 @@
 package geom
 
 import (
-	"github.com/vdobler/plot"
 	"image/color"
+
+	"github.com/vdobler/plot"
 )
 
 type Point struct {
@@ -13,7 +14,7 @@ type Point struct {
 	Shape int
 }
 
-func (p Point) Render(data plot.DataFrame, aes plot.AesMapping, p plot.Plot) {
+func (p Point) Render(data plot.DataFrame, aes plot.AesMapping, plot plot.Plot) {
 	am := p.Aes.Merge(aes, plot.DefaultTheme.PointAes)
 	for i := 0; i < plot.Length(data); i++ {
 		x := plot.Field(data, aes.X)

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gonum/plot/vg"
+	"gonum.org/v1/plot/vg"
 )
 
 // Scale provides position scales like x- and y-axis as well as color

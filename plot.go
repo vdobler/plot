@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gonum/plot/vg"
-	"github.com/gonum/plot/vg/vgimg"
+	"gonum.org/v1/plot/vg"
+	"gonum.org/v1/plot/vg/vgimg"
 )
 
 var now = time.Now
@@ -195,7 +195,7 @@ func (p *Plot) WritePNG(filename string, width, height vg.Length) error {
 	defer file.Close()
 
 	canvas := vgimg.PngCanvas{Canvas: vgimg.New(width, height)}
-	canvas.Translate(-width/2, -height/2)
+	// canvas.Translate(vg.Point{-width / 2, -height / 2})
 	p.DumpTo(canvas, width, height)
 	canvas.WriteTo(file)
 	return nil
@@ -450,7 +450,7 @@ func (plot *Plot) PrepareScales(data *DataFrame, aes AesMapping) {
 			} else {
 				field := data.Columns[a]
 				field.Apply(plotScale.Transform.Trans)
-				fmt.Printf("    Transformed data on scale ", a)
+				fmt.Printf("    Transformed data on scale %v", a)
 			}
 		}
 
@@ -1253,6 +1253,7 @@ func (panel *Panel) Draw(vp Viewport, showX, showY bool) {
 
 	major := MergeStyles(panel.Plot.Theme.GridMajor, DefaultTheme.GridMajor)
 	majorLT := String2LineType(major["linetype"])
+	fmt.Println("!!!!!!!!!!!!!!!", major["linetype"], majorLT)
 	majorSize := String2Float(major["size"], 0, 20)
 	majorCol := String2Color(major["color"])
 
